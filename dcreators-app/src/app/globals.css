@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F8F7F3; /* Very soft abstract cream seen in bg of pages */
+  --foreground: #1A1A1A;
+  --primary-green: #00A652;
+  --primary-red: #ED1C24;
+  --primary-blue: #0088CC;
+  --text-muted: #6B7280;
+  --card-bg: #FFFFFF;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary-green: var(--primary-green);
+  --color-primary-red: var(--primary-red);
+  --color-primary-blue: var(--primary-blue);
+  --color-muted: var(--text-muted);
+  --color-card: var(--card-bg);
+
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-outfit);
+}
+
+body {
+  background-color: #ededed;
+  /* Mobile background */
+  background-image: url('/bg-4.png');
+  background-blend-mode: multiply;
+  background-size: cover;
+  background-position: center top;
+  background-attachment: fixed;
+  color: var(--foreground);
+}
+
+/* Swap to wide image on Desktop view */
+@media (min-width: 768px) {
+  body {
+    background-image: url('/desktop-bg.png');
+  }
+}
