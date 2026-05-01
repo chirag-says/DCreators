@@ -79,17 +79,46 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
     setUploadFiles(prev => prev.filter((_, i) => i !== index));
   }
 
+  async function uploadToCloud(localUri: string): Promise<string> {
+    const cloudName = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
+    if (!cloudName) return localUri; // fallback for dev
+
+    try {
+      const formData = new FormData();
+      const filename = localUri.split('/').pop() || 'design.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      formData.append('file', { uri: localUri, name: filename, type } as any);
+      formData.append('upload_preset', 'dcreators_unsigned');
+      formData.append('folder', 'dcreators/submissions');
+
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.secure_url) return data.secure_url;
+      return localUri;
+    } catch {
+      return localUri;
+    }
+  }
+
   async function handleSubmitDesign() {
     if (!project?.id) return;
     if (uploadFiles.length === 0) { Alert.alert('No files', 'Please add at least one design image.'); return; }
 
     setIsUploading(true);
     try {
-      // Insert submission record
+      // Upload all files to Cloudinary first
+      const uploadedUrls = await Promise.all(uploadFiles.map(uri => uploadToCloud(uri)));
+
+      // Insert submission record with remote URLs
       const { error } = await supabase.from('submissions').insert({
         project_id: project.id,
         round: selectedRound,
-        files: uploadFiles,
+        files: uploadedUrls,
         consultant_note: uploadNote || null,
       });
 

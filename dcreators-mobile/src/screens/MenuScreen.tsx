@@ -3,12 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform, Image, ScrollView, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   X, User, ShoppingBag, Bell, Bookmark, Settings, FileText,
-  Briefcase, MessageCircle, ChevronRight, LogOut, Clock,
+  Briefcase, MessageCircle, ChevronRight, LogOut, Clock, Package,
 } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 
+// Static menu items — consultant-only items are filtered at render time
 const MENU_SECTIONS = [
   {
     title: null,
@@ -22,6 +23,7 @@ const MENU_SECTIONS = [
   {
     title: null,
     items: [
+      { title: 'My Products', icon: Package, route: 'MyProducts', color: '#7C3AED', consultantOnly: true },
       { title: 'Creative Shop', icon: ShoppingBag, route: 'Shop', color: '#EC4899' },
       { title: 'Saved Creators', icon: Bookmark, route: 'SavedCreators', color: '#10B981' },
     ],
@@ -88,34 +90,42 @@ export default function MenuScreen({ navigation }: any) {
         </TouchableOpacity>
 
         {/* ── Menu Sections ── */}
-        {MENU_SECTIONS.map((section, si) => (
-          <View key={si} style={styles.sectionCard}>
-            {section.items.map((item, index) => {
-              const Icon = item.icon;
-              const isLast = index === section.items.length - 1;
-              return (
-                <TouchableOpacity
-                  key={item.title}
-                  style={[styles.menuItem, !isLast && styles.menuItemBorder]}
-                  onPress={() => {
-                    if (item.route === 'Dashboard' || item.route === 'History') {
-                      navigation.navigate('Main', { screen: item.route });
-                    } else {
-                      navigation.navigate(item.route);
-                    }
-                  }}
-                  activeOpacity={0.6}
-                >
-                  <View style={[styles.iconCircle, { backgroundColor: item.color + '12' }]}>
-                    <Icon size={18} color={item.color} />
-                  </View>
-                  <Text style={styles.menuText}>{item.title}</Text>
-                  <ChevronRight size={16} color="#CCC" />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ))}
+        {MENU_SECTIONS.map((section, si) => {
+          // Filter out consultant-only items for client users
+          const visibleItems = section.items.filter(
+            (item: any) => !item.consultantOnly || isConsultant
+          );
+          if (visibleItems.length === 0) return null;
+
+          return (
+            <View key={si} style={styles.sectionCard}>
+              {visibleItems.map((item: any, index: number) => {
+                const Icon = item.icon;
+                const isLast = index === visibleItems.length - 1;
+                return (
+                  <TouchableOpacity
+                    key={item.title}
+                    style={[styles.menuItem, !isLast && styles.menuItemBorder]}
+                    onPress={() => {
+                      if (item.route === 'Dashboard' || item.route === 'History') {
+                        navigation.navigate('Main', { screen: item.route });
+                      } else {
+                        navigation.navigate(item.route);
+                      }
+                    }}
+                    activeOpacity={0.6}
+                  >
+                    <View style={[styles.iconCircle, { backgroundColor: item.color + '12' }]}>
+                      <Icon size={18} color={item.color} />
+                    </View>
+                    <Text style={styles.menuText}>{item.title}</Text>
+                    <ChevronRight size={16} color="#CCC" />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          );
+        })}
 
         {/* ── Logout ── */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>

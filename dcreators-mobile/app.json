@@ -25,6 +25,18 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f38a0aeb-adff-458a-bd3a-b5b23a8cdccd"
+      }
+    },
+    "owner": "chiragmtest",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f38a0aeb-adff-458a-bd3a-b5b23a8cdccd"
     }
   }
 }

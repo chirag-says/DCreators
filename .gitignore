@@ -3,6 +3,10 @@ node_modules/
 .pnp
 .pnp.js
 
+# AI / Agent configs
+.agents/
+.gemini/
+
 # Environment variables
 .env
 .env.local
@@ -25,6 +29,14 @@ out/
 *.mobileprovision
 *.orig.*
 web-build/
+android/
+ios/
+
+# EAS
+.eas/
+
+# Supabase
+supabase/.temp/
 
 # Debug logs
 npm-debug.log*
@@ -42,9 +54,15 @@ desktop.ini
 *.swp
 *.swo
 
-# Package lock files (optional - remove if you want to track these)
-# package-lock.json
-
 # Misc
 *.tsbuildinfo
 *.log
+
+# Figma exports / PDF docs (not code)
+page_*.png
+*.pdf
+figma/
+graphify-out/
+
+# Refactor scripts (one-off dev tools)
+refactor-*.js

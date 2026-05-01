@@ -1,38 +1,132 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ImageBackground, Platform, FlatList } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ImageBackground, Platform, FlatList, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Search, Plus } from 'lucide-react-native';
-import CloudImage from '../components/CloudImage';
+import { ChevronLeft, Search, MessageSquare, User } from 'lucide-react-native';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
-
-const CHATS = [
-  { id: '1', name: 'Shoumik Sen', code: 'D101', role: 'Photographer', lastMessage: 'Here are the final edited drafts for your review.', time: '10:42 AM', unread: 2, avatar: 'dcreators/photographer' },
-  { id: '2', name: 'Rajdeep Das', code: 'D207', role: 'Designer', lastMessage: 'Yes, the logo source files are included in the ZIP.', time: 'Yesterday', unread: 0, avatar: 'dcreators/designer' },
-  { id: '3', name: 'Amit Ghosh', code: 'D305', role: 'Sculptor', lastMessage: 'Let me check the material availability and get back.', time: 'Mon', unread: 0, avatar: 'dcreators/sculptor' },
-  { id: '4', name: 'DCreators Support', code: 'Admin', role: 'Support Team', lastMessage: 'Your payment for Assignment 1021 has been processed.', time: 'May 4', unread: 0, avatar: null },
-];
 
 const LOCAL_IMAGES: Record<string, any> = {
   'dcreators/photographer': require('../../assets/photographer.png'),
   'dcreators/designer': require('../../assets/designer.png'),
   'dcreators/sculptor': require('../../assets/sculptor.png'),
+  'dcreators/artisan': require('../../assets/artisan.png'),
 };
 
 export default function MessagesListScreen({ navigation }: any) {
-  const renderItem = ({ item }: { item: typeof CHATS[0] }) => (
+  const profile = useAuthStore((s) => s.profile);
+  const currentRole = useAuthStore((s) => s.currentRole);
+  const consultantProfile = useAuthStore((s) => s.consultantProfile);
+
+  const [chats, setChats] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => { fetchChats(); }, [profile?.id, currentRole]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchChats().finally(() => setRefreshing(false));
+  }, [profile?.id, currentRole]);
+
+  async function fetchChats() {
+    if (!profile?.id) { setLoading(false); return; }
+    try {
+      // Fetch projects the user is involved in (either as client or consultant)
+      let query = supabase
+        .from('projects')
+        .select('id, assignment_type, status, client_id, consultant_id, consultant_profiles(display_name, code, category)')
+        .in('status', ['accepted', 'advance_paid', 'in_progress', 'review_1', 'review_2', 'final_review', 'approved', 'completed']);
+
+      if (currentRole === 'consultant' && consultantProfile?.id) {
+        query = query.eq('consultant_id', consultantProfile.id);
+      } else {
+        query = query.eq('client_id', profile.id);
+      }
+
+      const { data: projects, error } = await query.order('updated_at', { ascending: false });
+      if (error || !projects || projects.length === 0) {
+        setChats([]);
+        setLoading(false);
+        return;
+      }
+
+      // For each project, get the latest message
+      const chatList = await Promise.all(
+        projects.map(async (proj: any) => {
+          const { data: msgs } = await supabase
+            .from('messages')
+            .select('text, created_at, sender_id')
+            .eq('project_id', proj.id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          const latestMsg = msgs?.[0];
+          const consultant = proj.consultant_profiles;
+          const otherName = currentRole === 'consultant'
+            ? 'Client' // We don't join client profile here for simplicity
+            : (consultant?.display_name || 'Consultant');
+          const otherCode = consultant?.code || '';
+          const category = consultant?.category || 'designer';
+
+          // Count unread (messages not from me)
+          const { count } = await supabase
+            .from('messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('project_id', proj.id)
+            .neq('sender_id', profile.id);
+
+          return {
+            id: proj.id,
+            name: otherName,
+            code: otherCode,
+            category,
+            lastMessage: latestMsg?.text || 'No messages yet',
+            time: latestMsg ? formatTime(latestMsg.created_at) : '',
+            unread: 0, // Real unread tracking would need a read_at field
+            projectId: proj.id,
+          };
+        })
+      );
+
+      setChats(chatList);
+    } catch (err) {
+      console.log('Fetch chats error:', err);
+      setChats([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function formatTime(dateStr: string) {
+    const now = new Date();
+    const d = new Date(dateStr);
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffDays === 0) {
+      return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return d.toLocaleDateString('en-IN', { weekday: 'short' });
+    }
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  }
+
+  const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
       style={styles.chatRow} 
-      onPress={() => navigation.navigate('Chat')}
+      onPress={() => navigation.navigate('Chat', { projectId: item.projectId })}
     >
-      {item.avatar ? (
-        <ImageBackground
-          source={LOCAL_IMAGES[item.avatar]}
+      {LOCAL_IMAGES[`dcreators/${item.category}`] ? (
+        <Image
+          source={LOCAL_IMAGES[`dcreators/${item.category}`]}
           style={styles.avatar}
-          imageStyle={{ borderRadius: 25 }}
         />
       ) : (
-        <View style={[styles.avatar, styles.supportAvatar]}>
-          <Text style={styles.supportAvatarText}>D</Text>
+        <View style={[styles.avatar, styles.fallbackAvatar]}>
+          <User size={24} color={colors.textTertiary} />
         </View>
       )}
 
@@ -66,31 +160,33 @@ export default function MessagesListScreen({ navigation }: any) {
         style={styles.backgroundImage}
         imageStyle={{ opacity: 1 }}
       >
-      
-        
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <ChevronLeft size={28} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Messages</Text>
-          <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Search size={22} color={colors.textPrimary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Plus size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
+          <View style={{ width: 28 }} />
         </View>
 
-        <FlatList
-          data={CHATS}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContainer}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          showsVerticalScrollIndicator={false}
-        />
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
+        ) : chats.length === 0 ? (
+          <View style={styles.emptyState}>
+            <MessageSquare size={56} color={colors.borderInput} />
+            <Text style={styles.emptyTitle}>No conversations yet</Text>
+            <Text style={styles.emptySubtitle}>Messages from your projects will appear here</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={chats}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContainer}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          />
+        )}
 
       </ImageBackground>
     </SafeAreaView>
@@ -112,8 +208,10 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderCard,
   },
   headerTitle: { fontSize: fontSizes.xl, fontWeight: '700', color: colors.textPrimary, fontFamily: fonts.heavy },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  iconBtn: { padding: spacing.xs },
+
+  emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 80, gap: spacing.sm },
+  emptyTitle: { fontSize: fontSizes.xl, fontFamily: fonts.heavy, color: colors.textSecondary },
+  emptySubtitle: { fontSize: fontSizes.base - 1, fontFamily: fonts.body, color: colors.textTertiary, textAlign: 'center', paddingHorizontal: 40 },
 
   listContainer: { paddingVertical: spacing.sm },
   separator: { height: 1, backgroundColor: colors.border, marginLeft: 80, marginRight: spacing.lg },
@@ -126,8 +224,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatar: { width: 50, height: 50, borderRadius: 25 },
-  supportAvatar: { backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  supportAvatarText: { color: colors.textOnPrimary, fontSize: 22, fontWeight: 'bold', fontFamily: fonts.heavy },
+  fallbackAvatar: { backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   
   chatInfo: { flex: 1, marginLeft: 14, justifyContent: 'center' },
   chatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },

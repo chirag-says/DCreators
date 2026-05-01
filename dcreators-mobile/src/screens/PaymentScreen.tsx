@@ -1,58 +1,43 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity,
-  Platform, Alert, ActivityIndicator, Animated, TextInput, Modal,
+  Platform, Alert, ActivityIndicator, Animated, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 import {
   ArrowLeft, CheckCircle, CreditCard, Smartphone, Building2,
-  Shield, Lock, X, AlertTriangle,
+  Shield, Lock, X, AlertCircle,
 } from 'lucide-react-native';
 import TopHeader from '../components/TopHeader';
 import { supabase } from '../lib/supabase';
+import { createCashfreeOrder, verifyPaymentStatus } from '../lib/cashfree';
 import { sendNotification } from '../lib/notifications';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
-
-type PaymentMethod = 'card' | 'upi' | 'netbanking';
-
-// Generate a mock transaction ID
-function generateTxnId(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let id = 'TXN';
-  for (let i = 0; i < 12; i++) id += chars.charAt(Math.floor(Math.random() * chars.length));
-  return id;
-}
 
 export default function PaymentScreen({ navigation, route }: any) {
   const project = route?.params?.project;
   const paymentType = route?.params?.paymentType || 'balance';
   const profile = useAuthStore((s) => s.profile);
 
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('upi');
   const [isPaying, setIsPaying] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
-  const [showGateway, setShowGateway] = useState(false);
-  const [gatewayStep, setGatewayStep] = useState<'input' | 'processing' | 'done'>('input');
+  const [showWebView, setShowWebView] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState('');
+  const [currentOrderId, setCurrentOrderId] = useState('');
+  const [verifying, setVerifying] = useState(false);
   const [txnId, setTxnId] = useState('');
-  const [upiId, setUpiId] = useState('');
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const totalCost = project?.final_offer || project?.budget || 0;
   const budget = project?.budget ? Number(project.budget) : 0;
   const advance = Math.round(budget * 0.5);
   const balance = totalCost - advance;
   const payAmount = paymentType === 'advance' ? advance : balance;
-
-  const METHODS: { key: PaymentMethod; label: string; icon: any; desc: string }[] = [
-    { key: 'upi', label: 'UPI', icon: Smartphone, desc: 'Pay via any UPI app' },
-    { key: 'card', label: 'Credit / Debit Card', icon: CreditCard, desc: 'Visa, Mastercard, Rupay' },
-    { key: 'netbanking', label: 'Net Banking', icon: Building2, desc: 'All major banks' },
-  ];
 
   useEffect(() => {
     if (isPaid) {
@@ -63,87 +48,129 @@ export default function PaymentScreen({ navigation, route }: any) {
     }
   }, [isPaid]);
 
-  // Pulse animation for processing
-  useEffect(() => {
-    if (gatewayStep === 'processing') {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.15, duration: 800, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    }
-  }, [gatewayStep]);
-
-  function handlePayPress() {
-    setShowGateway(true);
-    setGatewayStep('input');
-  }
-
-  async function handleConfirmPayment() {
-    if (selectedMethod === 'upi' && !upiId.includes('@')) {
-      Alert.alert('Invalid UPI ID', 'Please enter a valid UPI ID (e.g. name@upi)');
+  async function handlePayPress() {
+    if (!profile?.email) {
+      Alert.alert('Error', 'User profile not found. Please log in again.');
       return;
     }
-    setGatewayStep('processing');
-    const newTxnId = generateTxnId();
-    setTxnId(newTxnId);
 
-    // Simulate 2.5s payment processing
-    setTimeout(async () => {
-      if (!project?.id || !profile?.id) {
-        setGatewayStep('input');
-        Alert.alert('Error', 'Missing project or profile data.');
-        return;
-      }
+    setIsPaying(true);
+    try {
+      // 1. Create order via Edge Function
+      const order = await createCashfreeOrder({
+        projectId: project?.id,
+        amount: payAmount,
+        paymentType,
+        customerName: profile.name || 'User',
+        customerEmail: profile.email,
+        customerPhone: profile.phone || undefined,
+      });
 
-      try {
-        // Record payment in Supabase
-        const { error: payErr } = await supabase.from('payments').insert({
-          project_id: project.id,
-          payer_id: profile.id,
-          amount: payAmount,
-          payment_type: paymentType,
-          status: 'completed',
-        });
+      setCurrentOrderId(order.order_id);
 
-        if (payErr) {
-          setGatewayStep('input');
-          Alert.alert('Payment Error', payErr.message);
-          return;
-        }
+      // 2. Build the Cashfree checkout URL
+      const env = order.environment === 'PROD' ? 'production' : 'sandbox';
+      const checkoutPage = buildCheckoutHtml(order.payment_session_id, env);
+      setCheckoutUrl(checkoutPage);
+      setShowWebView(true);
 
-        // Update project status
-        const newStatus = paymentType === 'advance' ? 'advance_paid' : 'completed';
-        const newProgress = paymentType === 'advance' ? 10 : 100;
-        await supabase.from('projects').update({
-          status: newStatus,
-          progress_percent: newProgress,
-          updated_at: new Date().toISOString(),
-        }).eq('id', project.id);
+    } catch (err: any) {
+      Alert.alert('Payment Error', err.message || 'Could not create payment order. Please try again.');
+    } finally {
+      setIsPaying(false);
+    }
+  }
 
-        // Notify consultant
-        if (project.consultant_id) {
-          sendNotification({
-            userId: project.consultant_id,
-            title: paymentType === 'advance' ? 'Advance Payment Received' : 'Balance Payment Received',
-            message: `Client paid ₹${payAmount.toLocaleString()} via ${selectedMethod.toUpperCase()}. Txn: ${newTxnId}`,
-            type: 'payment',
+  function buildCheckoutHtml(sessionId: string, env: string): string {
+    // Generate an HTML page that loads Cashfree's JS SDK and triggers checkout
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+        <style>
+          body { margin: 0; padding: 20px; background: #F5F5F5; font-family: -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+          .loading { text-align: center; color: #666; }
+          .loading h3 { color: #1B3A5C; margin-bottom: 8px; }
+          .spinner { width: 40px; height: 40px; border: 4px solid #E5E7EB; border-top: 4px solid #1B3A5C; border-radius: 50%; animation: spin 1s linear infinite; margin: 20px auto; }
+          @keyframes spin { to { transform: rotate(360deg); } }
+        </style>
+      </head>
+      <body>
+        <div class="loading">
+          <div class="spinner"></div>
+          <h3>Opening Payment Gateway...</h3>
+          <p>Please wait while we redirect you to Cashfree</p>
+        </div>
+        <script>
+          const cashfree = Cashfree({ mode: "${env}" });
+          
+          cashfree.checkout({
+            paymentSessionId: "${sessionId}",
+            redirectTarget: "_self",
+          }).then(function(result) {
+            if (result.error) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', message: result.error.message }));
+            }
+            if (result.paymentDetails) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'success', data: result.paymentDetails }));
+            }
+          }).catch(function(err) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', message: err.message || 'Payment failed' }));
           });
-        }
+        </script>
+      </body>
+      </html>
+    `;
+  }
 
-        setGatewayStep('done');
-        setTimeout(() => {
-          setShowGateway(false);
-          setIsPaid(true);
-        }, 1500);
-      } catch (err: any) {
-        setGatewayStep('input');
-        Alert.alert('Error', err.message || 'Something went wrong.');
+  async function handleWebViewMessage(event: any) {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'success') {
+        setShowWebView(false);
+        await handlePaymentComplete();
+      } else if (data.type === 'error') {
+        setShowWebView(false);
+        Alert.alert('Payment Failed', data.message || 'Something went wrong.');
       }
-    }, 2500);
+    } catch {}
+  }
+
+  function handleWebViewNavigationChange(navState: any) {
+    const { url } = navState;
+    // Detect return URL — Cashfree redirects back after payment
+    if (url.includes('payment/callback') || url.includes('order_id=')) {
+      setShowWebView(false);
+      handlePaymentComplete();
+    }
+  }
+
+  async function handlePaymentComplete() {
+    setVerifying(true);
+    try {
+      // Poll our DB for the webhook update
+      const result = await verifyPaymentStatus(currentOrderId);
+
+      if (result.status === 'completed') {
+        setTxnId(result.cashfreePaymentId || currentOrderId);
+        setIsPaid(true);
+      } else if (result.status === 'failed') {
+        Alert.alert('Payment Failed', 'Your payment was not successful. Please try again.');
+      } else {
+        // Still pending after polling — might take time for webhook
+        Alert.alert(
+          'Payment Processing',
+          'Your payment is being verified. You will receive a notification once confirmed.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      }
+    } catch (err: any) {
+      Alert.alert('Verification Error', err.message || 'Could not verify payment status.');
+    } finally {
+      setVerifying(false);
+    }
   }
 
   return (
@@ -171,12 +198,16 @@ export default function PaymentScreen({ navigation, route }: any) {
                 <Text style={styles.successAmount}>₹{payAmount.toLocaleString()}</Text>
                 <View style={styles.receiptBox}>
                   <View style={styles.receiptRow}>
-                    <Text style={styles.receiptLabel}>Transaction ID</Text>
-                    <Text style={styles.receiptValue}>{txnId}</Text>
+                    <Text style={styles.receiptLabel}>Order ID</Text>
+                    <Text style={styles.receiptValue} numberOfLines={1}>{currentOrderId}</Text>
                   </View>
                   <View style={styles.receiptRow}>
-                    <Text style={styles.receiptLabel}>Method</Text>
-                    <Text style={styles.receiptValue}>{selectedMethod.toUpperCase()}</Text>
+                    <Text style={styles.receiptLabel}>Payment ID</Text>
+                    <Text style={styles.receiptValue} numberOfLines={1}>{txnId}</Text>
+                  </View>
+                  <View style={styles.receiptRow}>
+                    <Text style={styles.receiptLabel}>Gateway</Text>
+                    <Text style={styles.receiptValue}>Cashfree</Text>
                   </View>
                   <View style={styles.receiptRow}>
                     <Text style={styles.receiptLabel}>Status</Text>
@@ -192,6 +223,14 @@ export default function PaymentScreen({ navigation, route }: any) {
                   <Text style={styles.doneBtnText}>Back to Dashboard</Text>
                 </TouchableOpacity>
               </Animated.View>
+            ) : verifying ? (
+              <View style={styles.verifyingCard}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.verifyingTitle}>Verifying Payment...</Text>
+                <Text style={styles.verifyingSubtitle}>
+                  Please wait while we confirm your payment with Cashfree.
+                </Text>
+              </View>
             ) : (
               <>
                 {/* Cost Breakdown */}
@@ -218,35 +257,37 @@ export default function PaymentScreen({ navigation, route }: any) {
                   </View>
                 </View>
 
-                {/* Payment Methods */}
+                {/* Payment Info */}
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Select Payment Method</Text>
-                  {METHODS.map((m) => {
-                    const Icon = m.icon;
-                    const selected = selectedMethod === m.key;
-                    return (
-                      <TouchableOpacity
-                        key={m.key}
-                        style={[styles.methodRow, selected && styles.methodRowActive]}
-                        onPress={() => setSelectedMethod(m.key)}
-                      >
-                        <View style={[styles.radio, selected && styles.radioSelected]}>
-                          {selected && <View style={styles.radioInner} />}
-                        </View>
-                        <Icon size={20} color={selected ? colors.primary : colors.textTertiary} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.methodText, selected && styles.methodTextActive]}>{m.label}</Text>
-                          <Text style={styles.methodDesc}>{m.desc}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
+                  <Text style={styles.cardTitle}>Payment Gateway</Text>
+                  <View style={styles.gatewayInfo}>
+                    <View style={styles.gatewayBadge}>
+                      <Text style={styles.gatewayBadgeText}>Cashfree</Text>
+                    </View>
+                    <Text style={styles.gatewayDesc}>
+                      You'll be redirected to Cashfree's secure payment page where you can pay using UPI, Cards, Net Banking, or Wallets.
+                    </Text>
+                  </View>
+                  <View style={styles.methodsList}>
+                    <View style={styles.methodChip}>
+                      <Smartphone size={16} color={colors.primary} />
+                      <Text style={styles.methodChipText}>UPI</Text>
+                    </View>
+                    <View style={styles.methodChip}>
+                      <CreditCard size={16} color={colors.primary} />
+                      <Text style={styles.methodChipText}>Cards</Text>
+                    </View>
+                    <View style={styles.methodChip}>
+                      <Building2 size={16} color={colors.primary} />
+                      <Text style={styles.methodChipText}>Net Banking</Text>
+                    </View>
+                  </View>
                 </View>
 
                 {/* Security Badge */}
                 <View style={styles.securityRow}>
                   <Shield size={16} color={colors.success} />
-                  <Text style={styles.securityText}>256-bit SSL encrypted · Secured by DCreators</Text>
+                  <Text style={styles.securityText}>PCI DSS Compliant · Secured by Cashfree</Text>
                   <Lock size={14} color={colors.success} />
                 </View>
               </>
@@ -255,116 +296,62 @@ export default function PaymentScreen({ navigation, route }: any) {
         </ScrollView>
 
         {/* Pay Button */}
-        {!isPaid && (
+        {!isPaid && !verifying && (
           <View style={styles.actionBar}>
-            <TouchableOpacity style={styles.payBtn} onPress={handlePayPress} disabled={isPaying}>
-              <Lock size={18} color={colors.textOnPrimary} />
-              <Text style={styles.payBtnText}>  Pay ₹{payAmount.toLocaleString()}</Text>
+            <TouchableOpacity
+              style={[styles.payBtn, isPaying && { opacity: 0.6 }]}
+              onPress={handlePayPress}
+              disabled={isPaying}
+            >
+              {isPaying ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Lock size={18} color={colors.textOnPrimary} />
+                  <Text style={styles.payBtnText}>  Pay ₹{payAmount.toLocaleString()}</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         )}
 
-        {/* ── Mock Payment Gateway Modal ── */}
-        <Modal visible={showGateway} animationType="slide" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.gatewayCard}>
-
-              {gatewayStep === 'input' && (
-                <>
-                  <View style={styles.gatewayHeader}>
-                    <Text style={styles.gatewayTitle}>DCreators Pay</Text>
-                    <TouchableOpacity onPress={() => setShowGateway(false)}>
-                      <X size={24} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.gatewayAmountBox}>
-                    <Text style={styles.gatewayAmountLabel}>Amount</Text>
-                    <Text style={styles.gatewayAmount}>₹{payAmount.toLocaleString()}</Text>
-                  </View>
-
-                  {selectedMethod === 'upi' && (
-                    <View style={styles.gatewayInputGroup}>
-                      <Text style={styles.gatewayFieldLabel}>Enter UPI ID</Text>
-                      <TextInput
-                        style={styles.gatewayInput}
-                        placeholder="yourname@upi"
-                        placeholderTextColor={colors.textTertiary}
-                        value={upiId}
-                        onChangeText={setUpiId}
-                        autoCapitalize="none"
-                        keyboardType="email-address"
-                      />
-                      <Text style={styles.gatewayHint}>Demo: Enter any valid UPI format (e.g. demo@ybl)</Text>
-                    </View>
-                  )}
-
-                  {selectedMethod === 'card' && (
-                    <View style={styles.gatewayInputGroup}>
-                      <Text style={styles.gatewayFieldLabel}>Card Number</Text>
-                      <TextInput style={styles.gatewayInput} placeholder="4706 1312 1121 2123" placeholderTextColor={colors.textTertiary} keyboardType="number-pad" />
-                      <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm }}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.gatewayFieldLabel}>Expiry</Text>
-                          <TextInput style={styles.gatewayInput} placeholder="MM/YY" placeholderTextColor={colors.textTertiary} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.gatewayFieldLabel}>CVV</Text>
-                          <TextInput style={styles.gatewayInput} placeholder="•••" placeholderTextColor={colors.textTertiary} secureTextEntry />
-                        </View>
-                      </View>
-                      <Text style={styles.gatewayHint}>Demo: Any values accepted for testing</Text>
-                    </View>
-                  )}
-
-                  {selectedMethod === 'netbanking' && (
-                    <View style={styles.gatewayInputGroup}>
-                      <Text style={styles.gatewayFieldLabel}>Select Bank</Text>
-                      <View style={styles.bankGrid}>
-                        {['SBI', 'HDFC', 'ICICI', 'Axis', 'Kotak', 'PNB'].map((bank) => (
-                          <TouchableOpacity key={bank} style={styles.bankChip}>
-                            <Text style={styles.bankChipText}>{bank}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                      <Text style={styles.gatewayHint}>Demo: Select any bank to proceed</Text>
-                    </View>
-                  )}
-
-                  <View style={styles.demoNotice}>
-                    <AlertTriangle size={14} color="#D97706" />
-                    <Text style={styles.demoNoticeText}>Demo Mode — No real money will be charged</Text>
-                  </View>
-
-                  <TouchableOpacity style={styles.gatewayPayBtn} onPress={handleConfirmPayment}>
-                    <Lock size={16} color={colors.textOnPrimary} />
-                    <Text style={styles.gatewayPayBtnText}>  Confirm Payment</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-
-              {gatewayStep === 'processing' && (
-                <View style={styles.processingContainer}>
-                  <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                    <View style={styles.processingCircle}>
-                      <ActivityIndicator size="large" color={colors.primary} />
-                    </View>
-                  </Animated.View>
-                  <Text style={styles.processingTitle}>Processing Payment</Text>
-                  <Text style={styles.processingSubtitle}>Please wait while we verify your payment...</Text>
-                  <Text style={styles.processingTxn}>Txn: {txnId}</Text>
-                </View>
-              )}
-
-              {gatewayStep === 'done' && (
-                <View style={styles.processingContainer}>
-                  <CheckCircle size={64} color={colors.success} />
-                  <Text style={[styles.processingTitle, { color: colors.success }]}>Payment Verified!</Text>
-                  <Text style={styles.processingSubtitle}>Redirecting back...</Text>
-                </View>
-              )}
+        {/* ── Cashfree WebView Checkout Modal ── */}
+        <Modal visible={showWebView} animationType="slide" onRequestClose={() => setShowWebView(false)}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }}>
+            <View style={styles.webViewHeader}>
+              <TouchableOpacity
+                onPress={() => {
+                  Alert.alert(
+                    'Cancel Payment?',
+                    'Are you sure you want to cancel this payment?',
+                    [
+                      { text: 'No', style: 'cancel' },
+                      { text: 'Yes, Cancel', style: 'destructive', onPress: () => setShowWebView(false) },
+                    ]
+                  );
+                }}
+              >
+                <X size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+              <Text style={styles.webViewTitle}>Cashfree Checkout</Text>
+              <Lock size={18} color={colors.success} />
             </View>
-          </View>
+            <WebView
+              source={{ html: checkoutUrl }}
+              style={{ flex: 1 }}
+              onMessage={handleWebViewMessage}
+              onNavigationStateChange={handleWebViewNavigationChange}
+              javaScriptEnabled
+              domStorageEnabled
+              startInLoadingState
+              renderLoading={() => (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#FFF' }}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={{ marginTop: 12, color: colors.textSecondary, fontFamily: fonts.body }}>Loading payment page...</Text>
+                </View>
+              )}
+            />
+          </SafeAreaView>
         </Modal>
 
       </SafeAreaView>
@@ -393,18 +380,22 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: fontSizes.md, fontFamily: fonts.heavy, color: colors.primary, fontWeight: '700' },
   totalValue: { fontSize: fontSizes.lg + 1, fontFamily: fonts.heavy, color: colors.primary, fontWeight: '700' },
 
-  methodRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    paddingVertical: 14, paddingHorizontal: spacing.md, borderRadius: radii.md,
-    borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm,
+  // Gateway info
+  gatewayInfo: { marginBottom: spacing.md },
+  gatewayBadge: {
+    alignSelf: 'flex-start', backgroundColor: '#EEF2FF',
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: radii.md, marginBottom: spacing.sm,
   },
-  methodRowActive: { borderColor: colors.primary, backgroundColor: '#EEF2FF' },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.borderInput, alignItems: 'center', justifyContent: 'center' },
-  radioSelected: { borderColor: colors.primary },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
-  methodText: { fontSize: fontSizes.base, fontFamily: fonts.medium, color: colors.textSecondary },
-  methodTextActive: { color: colors.primary, fontWeight: '600' },
-  methodDesc: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textTertiary, marginTop: 1 },
+  gatewayBadgeText: { fontSize: fontSizes.sm, fontWeight: '700', color: colors.primary, fontFamily: fonts.heavy },
+  gatewayDesc: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 20 },
+
+  methodsList: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  methodChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: radii.full,
+    backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: colors.borderInput,
+  },
+  methodChipText: { fontSize: fontSizes.sm, fontWeight: '600', color: colors.textSecondary, fontFamily: fonts.medium },
 
   securityRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.md },
   securityText: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textTertiary },
@@ -420,9 +411,17 @@ const styles = StyleSheet.create({
   receiptBox: { width: '100%', backgroundColor: colors.sectionBg, borderRadius: radii.md, padding: spacing.md, gap: spacing.sm },
   receiptRow: { flexDirection: 'row', justifyContent: 'space-between' },
   receiptLabel: { fontSize: fontSizes.sm, fontFamily: fonts.body, color: colors.textTertiary },
-  receiptValue: { fontSize: fontSizes.sm, fontFamily: fonts.heavy, color: colors.textPrimary },
+  receiptValue: { fontSize: fontSizes.sm, fontFamily: fonts.heavy, color: colors.textPrimary, maxWidth: '60%' },
   doneBtn: { backgroundColor: colors.primary, paddingVertical: 14, paddingHorizontal: spacing['4xl'], borderRadius: radii.md, marginTop: spacing.md },
   doneBtnText: { color: colors.textOnPrimary, fontSize: fontSizes.md, fontWeight: '700', fontFamily: fonts.heavy },
+
+  // Verifying
+  verifyingCard: {
+    alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: radii.xl, padding: spacing['2xl'], marginTop: spacing.xl, gap: spacing.md, ...shadows.card,
+  },
+  verifyingTitle: { fontSize: fontSizes.xl, fontFamily: fonts.heavy, color: colors.textPrimary },
+  verifyingSubtitle: { fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textSecondary, textAlign: 'center' },
 
   actionBar: {
     paddingHorizontal: spacing.xl, paddingVertical: 14,
@@ -435,63 +434,12 @@ const styles = StyleSheet.create({
   },
   payBtnText: { color: colors.textOnPrimary, fontSize: fontSizes.lg + 1, fontWeight: '700', fontFamily: fonts.heavy },
 
-  // ── Modal Gateway ──
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
+  // WebView Modal
+  webViewHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.borderCard,
+    backgroundColor: '#FFF',
   },
-  gatewayCard: {
-    backgroundColor: colors.cardBg, borderTopLeftRadius: radii['2xl'], borderTopRightRadius: radii['2xl'],
-    padding: spacing.xl, paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
-    minHeight: 380,
-  },
-  gatewayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xl },
-  gatewayTitle: { fontSize: fontSizes.xl, fontFamily: fonts.heavy, color: colors.primary },
-
-  gatewayAmountBox: {
-    backgroundColor: '#EEF2FF', borderRadius: radii.md, padding: spacing.lg,
-    alignItems: 'center', marginBottom: spacing.xl,
-  },
-  gatewayAmountLabel: { fontSize: fontSizes.sm, fontFamily: fonts.body, color: colors.textSecondary },
-  gatewayAmount: { fontSize: 28, fontFamily: fonts.heavy, color: colors.primary, marginTop: spacing.xs },
-
-  gatewayInputGroup: { marginBottom: spacing.lg },
-  gatewayFieldLabel: { fontSize: fontSizes.sm, fontFamily: fonts.heavy, color: colors.textPrimary, marginBottom: spacing.sm },
-  gatewayInput: {
-    backgroundColor: colors.sectionBg, borderWidth: 1, borderColor: colors.borderInput,
-    borderRadius: radii.md, height: 48, paddingHorizontal: spacing.md,
-    fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textPrimary,
-  },
-  gatewayHint: { fontSize: fontSizes.xs, fontFamily: fonts.body, color: colors.textTertiary, marginTop: spacing.xs, fontStyle: 'italic' },
-
-  bankGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  bankChip: {
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-    backgroundColor: colors.sectionBg, borderRadius: radii.md,
-    borderWidth: 1, borderColor: colors.borderInput,
-  },
-  bankChipText: { fontSize: fontSizes.sm, fontFamily: fonts.heavy, color: colors.textPrimary },
-
-  demoNotice: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: '#FEF3C7', borderRadius: radii.md, padding: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  demoNoticeText: { fontSize: fontSizes.sm, fontFamily: fonts.medium, color: '#92400E' },
-
-  gatewayPayBtn: {
-    backgroundColor: colors.success, paddingVertical: 16, borderRadius: radii.lg,
-    alignItems: 'center', flexDirection: 'row', justifyContent: 'center',
-  },
-  gatewayPayBtnText: { color: colors.textOnPrimary, fontSize: fontSizes.lg, fontWeight: '700', fontFamily: fonts.heavy },
-
-  // Processing
-  processingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing['4xl'], gap: spacing.lg },
-  processingCircle: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center',
-  },
-  processingTitle: { fontSize: fontSizes.xl, fontFamily: fonts.heavy, color: colors.textPrimary },
-  processingSubtitle: { fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textSecondary },
-  processingTxn: { fontSize: fontSizes.sm, fontFamily: fonts.medium, color: colors.textTertiary, marginTop: spacing.sm },
+  webViewTitle: { fontSize: fontSizes.lg, fontWeight: '700', color: colors.textPrimary, fontFamily: fonts.heavy },
 });

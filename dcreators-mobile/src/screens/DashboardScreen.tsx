@@ -8,17 +8,13 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Clock, CheckCircle, XCircle, FileText, AlertCircle } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 
-// Fallback hardcoded data when Supabase is not yet configured
-const FALLBACK_CREATORS = [
-  { id: '1', name: 'Shoumik Sen', code: 'D101', subtitle: 'MFA Photography, Satyajit Ray Film & Television Institute', experience: '8 years', expertise: 'Wedding Photography, Cinematic Portraiture, Product Shoots', avatar_public_id: 'dcreators/photographer', category: 'photographer', base_price: 15000 },
-  { id: '2', name: 'Rajdeep Das', code: 'D204', subtitle: 'BDes Communication Design, NID Ahmedabad', experience: '6 years', expertise: 'Brand Identity, UI/UX Design, Packaging Design', avatar_public_id: 'dcreators/designer', category: 'designer', base_price: 20000 },
-  { id: '3', name: 'Amit Ghosh', code: 'D312', subtitle: 'MFA Sculpture, Govt. College of Art & Craft, Kolkata', experience: '15 years', expertise: 'Bronze Casting, Public Installations, Stone Carving', avatar_public_id: 'dcreators/sculptor', category: 'sculptor', base_price: 35000 },
-  { id: '4', name: 'Ravi Sutradhar', code: 'D418', subtitle: 'National Award Winner, Shantiniketan Craft Collective', experience: '20 years', expertise: 'Terracotta Art, Dokra Casting, Traditional Pottery', avatar_public_id: 'dcreators/artisan', category: 'artisan', base_price: 12000 },
-  { id: '5', name: 'Sudip Paul', code: 'D105', subtitle: 'MVA Applied Arts, Kala Bhavana, Visva-Bharati University', experience: '12 years', expertise: 'Fashion Photography, Art Direction, Editorial Shoots', avatar_public_id: 'dcreators/photo_archive_1', category: 'photographer', base_price: 25000 },
-  { id: '6', name: 'Rahul Dey', code: 'D109', subtitle: 'PG Diploma, Sri Aurobindo Centre for Arts & Communication', experience: '5 years', expertise: 'Wildlife Photography, Travel Journalism, Photo Editing', avatar_public_id: 'dcreators/photo_archive_3', category: 'photographer', base_price: 10000 },
-  { id: '7', name: 'Suita Roy', code: 'D211', subtitle: 'MDes Industrial Design, IIT Bombay (IDC School of Design)', experience: '4 years', expertise: 'Product Design, 3D Visualization, User Research', avatar_public_id: 'dcreators/design_hub_2', category: 'designer', base_price: 18000 },
-  { id: '8', name: 'Rajib Sarkar', code: 'D215', subtitle: 'BFA Applied Arts, Indian College of Arts & Draftsmanship', experience: '7 years', expertise: 'Graphic Design, Typography, Motion Graphics', avatar_public_id: 'dcreators/design_hub_3', category: 'designer', base_price: 14000 },
-];
+// Category-to-local-fallback-avatar mapping (used when consultant has no avatar_url)
+const CATEGORY_FALLBACK_AVATAR: Record<string, string> = {
+  photographer: 'dcreators/photographer',
+  designer: 'dcreators/designer',
+  sculptor: 'dcreators/sculptor',
+  artisan: 'dcreators/artisan',
+};
 
 // Local image fallback map (when Cloudinary isn't configured yet)
 const LOCAL_IMAGES: Record<string, any> = {
@@ -107,31 +103,27 @@ export default function DashboardScreen({ navigation }: any) {
         .eq('is_active', true)
         .order('created_at', { ascending: true });
 
-      // Map real DB profiles to card format
-      const realProfiles = (!error && data && data.length > 0)
-        ? data.map((cp: any) => ({
-            id: cp.id,
-            name: cp.display_name,
-            code: cp.code,
-            subtitle: cp.subtitle || '',
-            experience: cp.experience || '',
-            expertise: cp.expertise || '',
-            avatar_public_id: cp.avatar_url || `dcreators/${cp.category}`,
-            category: cp.category,
-            base_price: cp.base_price,
-            is_approved: cp.is_approved,
-            user_id: cp.user_id,
-            isReal: true,
-          }))
-        : [];
-
-      // Merge: real profiles first, then fill with demo data (de-dup by code)
-      const realCodes = new Set(realProfiles.map((p: any) => p.code));
-      const demoFill = FALLBACK_CREATORS.filter((d) => !realCodes.has(d.code));
-      setCreators([...realProfiles, ...demoFill]);
+      if (!error && data) {
+        const profiles = data.map((cp: any) => ({
+          id: cp.id,
+          name: cp.display_name,
+          code: cp.code,
+          subtitle: cp.subtitle || '',
+          experience: cp.experience || '',
+          expertise: cp.expertise || '',
+          avatar_public_id: cp.avatar_url || CATEGORY_FALLBACK_AVATAR[cp.category] || 'dcreators/designer',
+          category: cp.category,
+          base_price: cp.base_price,
+          is_approved: cp.is_approved,
+          user_id: cp.user_id,
+        }));
+        setCreators(profiles);
+      } else {
+        setCreators([]);
+      }
       setUseCloudinary(false);
     } catch {
-      setCreators(FALLBACK_CREATORS);
+      setCreators([]);
       setUseCloudinary(false);
     } finally {
       setLoading(false);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, TextInput, Platform, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Search, Filter, ShoppingBag, Star, Heart } from 'lucide-react-native';
+import { ChevronLeft, Search, Filter, ShoppingBag, Heart } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 
@@ -11,28 +11,10 @@ const fontHeavy = fonts.heavy;
 
 const CATEGORIES = ['All', 'Templates', 'Digital Prints', 'UI Kits', 'Branding', 'Photography'];
 
-const FALLBACK_PRODUCTS = [
-  { id: '1', title: 'Minimalist Brand Manual', category: 'Templates', price: 1499, rating: 4.8, reviews: 124, creator: 'D207 / Rajdeep', image: require('../../assets/design_hub_1.png') },
-  { id: '2', title: 'E-commerce App UI Kit', category: 'UI Kits', price: 2999, rating: 4.9, reviews: 89, creator: 'D207 / Suita', image: require('../../assets/photo_archive_3.png') },
-  { id: '3', title: 'Vintage Lightroom Presets', category: 'Photography', price: 999, rating: 4.7, reviews: 256, creator: 'D101 / Shoumik', image: require('../../assets/photo_archive_1.png') },
-  { id: '4', title: 'Corporate Brochure Template', category: 'Templates', price: 1299, rating: 4.6, reviews: 45, creator: 'D207 / Rajib', image: require('../../assets/design_hub_3.png') },
-  { id: '5', title: 'Vector Illustration Pack', category: 'Branding', price: 1899, rating: 4.9, reviews: 112, creator: 'D305 / Amit', image: require('../../assets/designer.png') },
-  { id: '6', title: 'Street Photography Zine', category: 'Digital Prints', price: 799, rating: 4.8, reviews: 78, creator: 'D105 / Sudip', image: require('../../assets/photo_archive_2.png') },
-];
-
-const LOCAL_IMAGES: Record<string, any> = {
-  'dcreators/design_hub_1': require('../../assets/design_hub_1.png'),
-  'dcreators/photo_archive_3': require('../../assets/photo_archive_3.png'),
-  'dcreators/photo_archive_1': require('../../assets/photo_archive_1.png'),
-  'dcreators/design_hub_3': require('../../assets/design_hub_3.png'),
-  'dcreators/designer': require('../../assets/designer.png'),
-  'dcreators/photo_archive_2': require('../../assets/photo_archive_2.png'),
-};
-
 export default function ShopScreen({ navigation }: any) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [products, setProducts] = useState<any[]>(FALLBACK_PRODUCTS);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchProducts(); }, []);
@@ -45,21 +27,22 @@ export default function ShopScreen({ navigation }: any) {
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         const dbProducts = data.map((p: any) => ({
           id: p.id,
           title: p.title,
           category: p.category || 'Other',
           price: Number(p.price),
-          rating: 4.5 + Math.random() * 0.5,
-          reviews: Math.floor(20 + Math.random() * 200),
           creator: `${p.consultant_profiles?.code || '---'} / ${p.consultant_profiles?.display_name?.split(' ')[0] || 'Creator'}`,
           image: p.images?.[0] ? { uri: p.images[0] } : require('../../assets/designer.png'),
-          isReal: true,
         }));
-        setProducts([...dbProducts, ...FALLBACK_PRODUCTS]);
+        setProducts(dbProducts);
+      } else {
+        setProducts([]);
       }
-    } catch {}
+    } catch {
+      setProducts([]);
+    }
     finally { setLoading(false); }
   }
 
@@ -144,6 +127,12 @@ export default function ShopScreen({ navigation }: any) {
             {/* Products Grid */}
             {loading ? (
               <ActivityIndicator size="large" color="#1B3A5C" style={{ marginTop: 40 }} />
+            ) : filteredProducts.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 60 }}>
+                <ShoppingBag size={56} color={colors.borderInput} />
+                <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textSecondary, marginTop: 16, fontFamily: fontHeavy }}>No products yet</Text>
+                <Text style={{ fontSize: 13, color: colors.textTertiary, fontFamily: fontBody, marginTop: 4 }}>Products listed by creators will appear here</Text>
+              </View>
             ) : (
               <View style={styles.productGrid}>
                 {filteredProducts.map(product => (
@@ -168,10 +157,6 @@ export default function ShopScreen({ navigation }: any) {
                       <Text style={styles.productCreator}>by {product.creator}</Text>
                       <View style={styles.productFooter}>
                         <Text style={styles.productPrice}>₹{Number(product.price).toLocaleString()}</Text>
-                        <View style={styles.ratingRow}>
-                          <Star size={12} color="#EAB308" fill="#EAB308" />
-                          <Text style={styles.ratingText}>{product.rating?.toFixed?.(1) || '4.8'}</Text>
-                        </View>
                       </View>
                     </View>
                   </TouchableOpacity>
@@ -256,6 +241,4 @@ const styles = StyleSheet.create({
   productCreator: { fontSize: fontSizes.xs + 1, color: colors.textTertiary, fontFamily: fontMedium, marginBottom: spacing.md },
   productFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   productPrice: { fontSize: fontSizes.base, fontWeight: '800', color: colors.textPrimary },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  ratingText: { fontSize: fontSizes.sm, color: colors.textSecondary, fontWeight: '600' },
 });

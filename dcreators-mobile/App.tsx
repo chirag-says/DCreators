@@ -42,6 +42,8 @@ import ProductDetailsScreen from './src/screens/ProductDetailsScreen';
 import MenuScreen from './src/screens/MenuScreen';
 import MessagesListScreen from './src/screens/MessagesListScreen';
 import EditConsultantProfileScreen from './src/screens/EditConsultantProfileScreen';
+import MyProductsScreen from './src/screens/MyProductsScreen';
+import AddEditProductScreen from './src/screens/AddEditProductScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -112,6 +114,8 @@ export default function App() {
         <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
         <Stack.Screen name="Menu" component={MenuScreen} options={{ animation: 'slide_from_left' }} />
         <Stack.Screen name="MessagesList" component={MessagesListScreen} />
+        <Stack.Screen name="MyProducts" component={MyProductsScreen} />
+        <Stack.Screen name="AddEditProduct" component={AddEditProductScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
