@@ -1,297 +1,815 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, Platform } from 'react-native';
+// ============================================================
+// ClientWorkorderScreen — Project Flow Timeline (Figma Match)
+// ============================================================
+// Matches: "Project Flow - Final.png" & "Open Source Project Flow -.png"
+//
+// Shows the full project lifecycle as a vertical timeline:
+//   1ST DESIGN OPTION → Client Feedback → Submit Reviews
+//   2ND DESIGN CHANGES → Client Feedback → Submit Reviews
+//   FINAL DESIGN CHANGES → Approve → Pay → Download → Rate
+// ============================================================
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  Platform, ActivityIndicator, Image, Linking,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
-import { ArrowLeft, Eye, MessageCircle, CheckCircle, Circle, Clock, CreditCard } from 'lucide-react-native';
+import { supabase } from '../lib/supabase';
+import {
+  FileText, ImageIcon, ChevronRight, Info,
+  ArrowLeft, Lock, Download, Star, MessageCircle,
+} from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import type { Submission } from '../types';
 
-const MILESTONES = [
-  { key: 'pending', label: 'Project Submitted', desc: 'Awaiting consultant response' },
-  { key: 'accepted', label: 'Consultant Accepted', desc: 'Ready for advance payment' },
-  { key: 'advance_paid', label: 'Advance Paid', desc: 'Work can begin' },
-  { key: 'in_progress', label: 'Work In Progress', desc: 'Consultant is working' },
-  { key: 'review_1', label: 'Review Round 1', desc: 'First draft submitted' },
-  { key: 'review_2', label: 'Review Round 2', desc: 'Revisions submitted' },
-  { key: 'final_review', label: 'Final Review', desc: 'Final submission ready' },
-  { key: 'approved', label: 'Client Approved', desc: 'Ready for balance payment' },
-  { key: 'completed', label: 'Completed', desc: 'Project delivered ✅' },
-];
+
+// ─── Constants ───────────────────────────────────────────────
+const ROUND_META: Record<string, { label: string; uploadLabel: string; feedbackLabel: string }> = {
+  review_1: {
+    label: '1ST DESIGN OPTION UPLOADED',
+    uploadLabel: '1st Design Options',
+    feedbackLabel: 'Your 1st review/ required changes on uploaded design',
+  },
+  review_2: {
+    label: '2ND DESIGN CHANGES UPLOADED',
+    uploadLabel: '2nd Design Options',
+    feedbackLabel: 'Your 2nd review/ required changes on uploaded design',
+  },
+  final: {
+    label: 'FINAL DESIGN CHANGES UPLOADED',
+    uploadLabel: 'Final Design Changes',
+    feedbackLabel: 'Your Final review/ required changes on uploaded design',
+  },
+};
+
 
 export default function ClientWorkorderScreen({ navigation, route }: any) {
   const project = route?.params?.project;
-  const [showMilestones, setShowMilestones] = useState(false);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const assignmentNo = project
-    ? `${project.id.slice(0, 4).toUpperCase()}/${new Date(project.created_at).getMonth() + 1}/${new Date(project.created_at).getFullYear().toString().slice(2)}`
-    : '----/--/--';
+  const projectCode = project
+    ? `D/${new Date(project.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '/')}`
+    : 'D/--/--/--';
 
-  const budget = project?.budget ? Number(project.budget) : 0;
-  const advance = Math.round(budget * 0.5);
   const status = project?.status || 'pending';
-  const progress = project?.progress_percent || 0;
+  const isCompleted = status === 'completed' || status === 'balance_paid';
+  const isApproved = status === 'approved' || isCompleted;
 
-  const isReviewPhase = ['review_1', 'review_2', 'final_review'].includes(status);
-  const needsAdvancePayment = status === 'accepted';
-  const needsBalancePayment = status === 'approved';
+  // ─── Fetch all submissions ────────────────────────────────
+  const fetchSubmissions = useCallback(async () => {
+    if (!project?.id) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('submissions')
+        .select('*')
+        .eq('project_id', project.id)
+        .order('created_at', { ascending: true });
 
-  const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-    pending: { label: 'Pending', color: colors.warning },
-    accepted: { label: 'Accepted', color: colors.success },
-    advance_paid: { label: 'Advance Paid', color: colors.info },
-    in_progress: { label: 'In Progress', color: '#8B5CF6' },
-    review_1: { label: 'Review 1 — Ready', color: '#EC4899' },
-    review_2: { label: 'Review 2 — Ready', color: '#EC4899' },
-    final_review: { label: 'Final Review — Ready', color: colors.error },
-    approved: { label: 'Approved', color: colors.success },
-    completed: { label: 'Completed', color: colors.success },
-  };
+      if (!error && data) {
+        setSubmissions(data as Submission[]);
+      }
+    } catch (err) {
+      console.log('[ClientWorkorder] fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [project?.id]);
 
-  const statusInfo = STATUS_LABELS[status] || STATUS_LABELS.pending;
+  useEffect(() => {
+    fetchSubmissions();
+  }, [fetchSubmissions]);
 
-  // Determine which milestones are completed
-  const statusOrder = MILESTONES.map(m => m.key);
-  const currentIndex = statusOrder.indexOf(status);
+  // ─── Derived data ─────────────────────────────────────────
+  const round1 = submissions.find(s => s.round === 'review_1');
+  const round2 = submissions.find(s => s.round === 'review_2');
+  const roundFinal = submissions.find(s => s.round === 'final');
 
+  const assignmentType = project?.assignment_type
+    ? project.assignment_type.charAt(0).toUpperCase() + project.assignment_type.slice(1).replace(/_/g, ' ')
+    : 'Creative Service';
+
+  const clientName = project?.client_name || 'Client';
+
+  // ─── Render ───────────────────────────────────────────────
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} imageStyle={{ opacity: 1 }}>
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <TopHeader />
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <TopHeader />
 
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-          <View style={styles.container}>
+      {loading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={colors.orange} />
+        </View>
+      ) : (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Header Section ─────────────────────────────── */}
+          <View style={styles.headerSection}>
+            <Text style={styles.projectTitle}>
+              Project Assignment - {projectCode}
+            </Text>
+            <Text style={styles.projectSubtitle}>
+              Incoming Request from "{project?.client_name || 'Client'}"
+            </Text>
+          </View>
 
-            {/* Back + Title */}
-            <View style={styles.titleRow}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                <ArrowLeft size={20} color={colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={styles.pageTitle}>Workorder</Text>
-              <View style={{ width: 36 }} />
-            </View>
+          {/* ── Category Badge ─────────────────────────────── */}
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryBadgeText}>{assignmentType.toUpperCase()}</Text>
+          </View>
 
-            {/* Assignment Number + Status */}
-            <View style={styles.headerRow}>
-              <View style={styles.primaryBadge}>
-                <Text style={styles.primaryBadgeText}>No: {assignmentNo}</Text>
-              </View>
-              <View style={[styles.statusChip, { backgroundColor: statusInfo.color }]}>
-                <Text style={styles.statusChipText}>{statusInfo.label}</Text>
-              </View>
-            </View>
+          {/* ── Timeline Container ─────────────────────────── */}
+          <View style={styles.timelineContainer}>
 
-            {/* Details Card */}
-            <View style={styles.card}>
-              <DetailRow label="Assignment Type" value={project?.assignment_type ? project.assignment_type.charAt(0).toUpperCase() + project.assignment_type.slice(1) : 'N/A'} />
-              <DetailRow label="Details" value={project?.assignment_details?.join(', ') || 'N/A'} />
-              <DetailRow label="Deadline" value={project?.deadline || 'Not set'} />
-              <DetailRow label="Brief" value={project?.assignment_brief || 'N/A'} />
+            {/* ═══ ROUND 1 ═══ */}
+            <RoundSection
+              submission={round1}
+              round="review_1"
+              status={status}
+              navigation={navigation}
+              project={project}
+            />
 
-              <View style={styles.divider} />
+            {/* ═══ ROUND 2 ═══ */}
+            {(round1?.client_action === 'revert' || round2) && (
+              <RoundSection
+                submission={round2}
+                round="review_2"
+                status={status}
+                navigation={navigation}
+                project={project}
+                previousFeedback={round1}
+              />
+            )}
 
-              <DetailRow label="Final Cost" value={`₹${project?.final_offer || budget}`} bold />
-              <DetailRow label="Budget" value={`₹${budget.toLocaleString()}`} />
-              <DetailRow label="Advance (50%)" value={`₹${advance.toLocaleString()}`} />
-            </View>
+            {/* ═══ FINAL ROUND ═══ */}
+            {(round2?.client_action === 'revert' || roundFinal || round2?.client_action === 'approve') && (
+              <RoundSection
+                submission={roundFinal}
+                round="final"
+                status={status}
+                navigation={navigation}
+                project={project}
+                previousFeedback={round2}
+                isFinal
+              />
+            )}
 
-            {/* Consultant Info */}
-            <View style={styles.consultantCard}>
-              <Text style={styles.assignedLabel}>Assigned to</Text>
-              <Text style={styles.assignedValue}>
-                {project?.consultant_profiles?.display_name || 'Consultant'} / {project?.consultant_profiles?.code || '---'}
-              </Text>
-            </View>
+            {/* ═══ POST-FINAL ACTIONS ═══ */}
+            {isApproved && (
+              <View style={styles.postFinalSection}>
+                {/* Approve Design Card */}
+                <View style={styles.approveDesignCard}>
+                  <ImageIcon size={28} color={colors.teal} />
+                  <Text style={styles.approveDesignLabel}>Approve Design</Text>
+                  <Text style={styles.approveDesignHint}>Click to View</Text>
+                </View>
 
-            {/* Progress Bar */}
-            <View style={styles.progressSection}>
-              <View style={styles.progressHeader}>
-                <Text style={styles.progressLabel}>Progress</Text>
-                <Text style={styles.progressPercent}>{progress}%</Text>
-              </View>
-              <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
-              </View>
-            </View>
+                {/* Pay Done Button */}
+                <TouchableOpacity
+                  style={styles.payDoneBtn}
+                  onPress={() => {
+                    if (status === 'approved') {
+                      navigation.navigate('Payment', { project, paymentType: 'balance' });
+                    }
+                  }}
+                >
+                  <Text style={styles.payDoneBtnText}>Pay Done</Text>
+                  <Lock size={14} color={colors.textOnPrimary} />
+                </TouchableOpacity>
 
-            {/* Work Progress Toggle Button */}
-            <TouchableOpacity
-              style={styles.toggleBtn}
-              onPress={() => setShowMilestones(!showMilestones)}
-            >
-              <Clock size={16} color={colors.primary} />
-              <Text style={styles.toggleBtnText}>
-                {showMilestones ? 'Hide Milestones' : 'View Work Progress'}
-              </Text>
-            </TouchableOpacity>
+                {/* Download Final Design */}
+                {isCompleted && (
+                  <TouchableOpacity
+                    style={styles.downloadBtn}
+                    onPress={() => {
+                      const finalFiles = roundFinal?.files;
+                      if (finalFiles?.[0]) {
+                        Linking.openURL(finalFiles[0]);
+                      }
+                    }}
+                  >
+                    <Download size={16} color={colors.primary} />
+                    <Text style={styles.downloadBtnText}>Download the Final Design</Text>
+                  </TouchableOpacity>
+                )}
 
-            {/* Milestone Timeline */}
-            {showMilestones && (
-              <View style={styles.timelineCard}>
-                <Text style={styles.timelineTitle}>Project Milestones</Text>
-                {MILESTONES.map((milestone, i) => {
-                  const isCompleted = i <= currentIndex;
-                  const isCurrent = i === currentIndex;
-                  const isLast = i === MILESTONES.length - 1;
-
-                  return (
-                    <View key={milestone.key} style={styles.milestoneRow}>
-                      {/* Vertical line */}
-                      <View style={styles.timelineCol}>
-                        {isCompleted ? (
-                          <CheckCircle size={20} color={isCurrent ? colors.primary : colors.success} />
-                        ) : (
-                          <Circle size={20} color={colors.borderInput} />
-                        )}
-                        {!isLast && (
-                          <View style={[styles.timelineLine, isCompleted && i < currentIndex && { backgroundColor: colors.success }]} />
-                        )}
-                      </View>
-                      {/* Text */}
-                      <View style={styles.milestoneText}>
-                        <Text style={[
-                          styles.milestoneLabel,
-                          isCompleted && { color: colors.textPrimary },
-                          isCurrent && { color: colors.primary },
-                        ]}>
-                          {milestone.label}
-                        </Text>
-                        <Text style={[styles.milestoneDesc, isCurrent && { color: colors.textSecondary }]}>
-                          {milestone.desc}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })}
+                {/* Rate Experience CTA */}
+                {isCompleted && (
+                  <TouchableOpacity
+                    style={styles.rateCta}
+                    onPress={() => navigation.navigate('RatingReview', { project })}
+                  >
+                    <Text style={styles.rateCtaText}>RATE YOUR EXPERIENCE</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
           </View>
-        </ScrollView>
 
-        {/* Bottom Actions */}
-        <View style={styles.actionBar}>
-          {isReviewPhase ? (
-            <TouchableOpacity
-              style={styles.reviewBtn}
-              onPress={() => navigation.navigate('ClientReview', { project })}
-            >
-              <Eye size={18} color={colors.textOnPrimary} />
-              <Text style={styles.actionBtnLabel}>Review Submission</Text>
-            </TouchableOpacity>
-          ) : needsAdvancePayment ? (
-            <TouchableOpacity
-              style={styles.payBtn}
-              onPress={() => navigation.navigate('Payment', { project, paymentType: 'advance' })}
-            >
-              <CreditCard size={18} color={colors.textOnPrimary} />
-              <Text style={styles.actionBtnLabel}>Pay Advance ₹{advance.toLocaleString()}</Text>
-            </TouchableOpacity>
-          ) : needsBalancePayment ? (
-            <TouchableOpacity
-              style={styles.payBtn}
-              onPress={() => navigation.navigate('Payment', { project, paymentType: 'balance' })}
-            >
-              <CreditCard size={18} color={colors.textOnPrimary} />
-              <Text style={styles.actionBtnLabel}>Pay Balance ₹{(budget - advance).toLocaleString()}</Text>
-            </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity
-            style={styles.chatBtn}
-            onPress={() => navigation.navigate('Chat', { project, otherName: project?.consultant_name || 'Consultant' })}
-          >
-            <MessageCircle size={16} color={colors.primary} />
-            <Text style={styles.chatBtnText}>Chat with Consultant</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    </ImageBackground>
+          {/* ── Empty state when no submissions ────────────── */}
+          {submissions.length === 0 && (
+            <View style={styles.emptyState}>
+              <FileText size={48} color={colors.borderInput} />
+              <Text style={styles.emptyTitle}>Awaiting First Submission</Text>
+              <Text style={styles.emptySubtitle}>
+                Your consultant will upload the first design options here once work begins.
+              </Text>
+            </View>
+          )}
+
+        </ScrollView>
+      )}
+
+      {/* ── Bottom Action Bar ────────────────────────────────── */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={styles.bottomBackBtn}
+          onPress={() => navigation.goBack()}
+        >
+          <ArrowLeft size={18} color={colors.textPrimary} />
+          <Text style={styles.bottomBackText}>Back</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.bottomChatBtn}
+          onPress={() => navigation.navigate('Chat', {
+            project,
+            otherName: project?.consultant_profiles?.display_name || 'Consultant',
+          })}
+        >
+          <MessageCircle size={16} color={colors.textOnPrimary} />
+          <Text style={styles.bottomChatText}>Chat</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
-function DetailRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+
+// ═══════════════════════════════════════════════════════════════
+// RoundSection — A single round in the timeline
+// ═══════════════════════════════════════════════════════════════
+function RoundSection({
+  submission,
+  round,
+  status,
+  navigation,
+  project,
+  previousFeedback,
+  isFinal = false,
+}: {
+  submission: Submission | undefined;
+  round: 'review_1' | 'review_2' | 'final';
+  status: string;
+  navigation: any;
+  project: any;
+  previousFeedback?: Submission;
+  isFinal?: boolean;
+}) {
+  const meta = ROUND_META[round];
+  const uploadDate = submission
+    ? new Date(submission.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })
+    : null;
+
+  const hasSubmission = !!submission;
+  const hasFeedback = !!submission?.client_action;
+  const feedbackText = submission?.feedback_text;
+  const isReviewPhase = round === 'review_1'
+    ? status === 'review_1'
+    : round === 'review_2'
+      ? status === 'review_2'
+      : status === 'final_review';
+
+  // For the Figma: Show the previous round's feedback text when present
+  const previousFeedbackText = previousFeedback?.feedback_text;
+
   return (
-    <View style={{ flexDirection: 'row', marginBottom: 6, flexWrap: 'wrap' }}>
-      <Text style={{ fontSize: fontSizes.xs + 1, fontWeight: '700', color: bold ? colors.textPrimary : colors.textSecondary, fontFamily: fonts.medium }}>{label}: </Text>
-      <Text style={{ fontSize: fontSizes.xs + 1, color: bold ? colors.textPrimary : colors.textSecondary, fontFamily: bold ? fonts.heavy : fonts.body, flexShrink: 1, fontWeight: bold ? '700' : '400' }}>{value}</Text>
+    <View style={styles.roundSection}>
+      {/* ── Timeline dot + line ──────────────────────────── */}
+      <View style={styles.timelineDotCol}>
+        <View style={[
+          styles.timelineDot,
+          hasSubmission && styles.timelineDotActive,
+        ]} />
+        <View style={[
+          styles.timelineVertLine,
+          hasSubmission && styles.timelineVertLineActive,
+        ]} />
+      </View>
+
+      {/* ── Round Content ────────────────────────────────── */}
+      <View style={styles.roundContent}>
+        {/* Upload header */}
+        {hasSubmission ? (
+          <View style={styles.uploadHeader}>
+            <FileText size={16} color={colors.orange} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.uploadHeaderText}>
+                {meta.label}
+              </Text>
+              <Text style={styles.uploadHeaderDate}>ON - {uploadDate}</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.uploadHeaderPending}>
+            <FileText size={16} color={colors.textTertiary} />
+            <Text style={styles.uploadHeaderTextPending}>
+              {meta.label}
+            </Text>
+          </View>
+        )}
+
+        {/* Design preview card */}
+        {hasSubmission && (
+          <TouchableOpacity
+            style={styles.designPreviewCard}
+            onPress={() => {
+              if (submission?.files?.length) {
+                navigation.navigate('PortfolioGallery', {
+                  images: submission.files,
+                  initialIndex: 0,
+                });
+              }
+            }}
+          >
+            {submission?.files?.[0] ? (
+              <Image
+                source={{ uri: submission.files[0] }}
+                style={styles.designPreviewImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.designPreviewPlaceholder}>
+                <ImageIcon size={32} color={colors.textTertiary} />
+              </View>
+            )}
+            <Text style={styles.designPreviewLabel}>{meta.uploadLabel}</Text>
+            <Text style={styles.designPreviewHint}>Click to View</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Feedback info bubble — shows when round needs review */}
+        {hasSubmission && isReviewPhase && !hasFeedback && (
+          <View style={styles.feedbackInfoBubble}>
+            <Info size={14} color={colors.teal} />
+            <Text style={styles.feedbackInfoText}>{meta.feedbackLabel}</Text>
+          </View>
+        )}
+
+        {/* Previous feedback display (text from prior round's revert) */}
+        {previousFeedbackText && (
+          <View style={styles.previousFeedbackCard}>
+            <Text style={styles.previousFeedbackText}>
+              {previousFeedbackText}
+            </Text>
+          </View>
+        )}
+
+        {/* Client's feedback on this round (after they've submitted) */}
+        {hasFeedback && feedbackText && (
+          <View style={styles.clientFeedbackCard}>
+            <View style={styles.feedbackInfoBubble}>
+              <Info size={14} color={colors.orange} />
+              <Text style={[styles.feedbackInfoText, { color: colors.orange }]}>
+                {round === 'final'
+                  ? 'Your Final review/ required changes on uploaded design'
+                  : `Your ${round === 'review_1' ? '1st' : '2nd'} review/ required changes on uploaded design`
+                }
+              </Text>
+            </View>
+            <Text style={styles.feedbackDisplayText}>{feedbackText}</Text>
+          </View>
+        )}
+
+        {/* Submit Reviews/Changes CTA */}
+        {hasSubmission && isReviewPhase && !hasFeedback && (
+          <TouchableOpacity
+            style={styles.submitReviewBtn}
+            onPress={() => navigation.navigate('ClientReview', { project })}
+          >
+            <MessageCircle size={14} color={colors.textOnPrimary} />
+            <Text style={styles.submitReviewBtnText}>
+              Submit your {round === 'review_1' ? '' : round === 'review_2' ? '2nd ' : 'final '}reviews/ Changes
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Final approval section */}
+        {isFinal && submission?.client_action === 'approve' && (
+          <View style={styles.finalApprovalNote}>
+            <Text style={styles.finalApprovalText}>
+              Final Approval : Upload all the designs
+            </Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// Styles
+// ═══════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: colors.screenBg },
-  safe: { flex: 1 },
-  container: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+  safe: { flex: 1, backgroundColor: colors.screenBg },
+  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { paddingBottom: 100 },
 
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' },
-  pageTitle: { fontSize: fontSizes.xl, fontFamily: fonts.heavy, color: colors.textPrimary },
+  // ── Header ──────────────────────────────────────────────────
+  headerSection: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  projectTitle: {
+    fontSize: fontSizes['2xl'],
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+    color: colors.orange,
+    marginBottom: spacing.xs,
+  },
+  projectSubtitle: {
+    fontSize: fontSizes.base,
+    fontFamily: fonts.body,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
 
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
-  primaryBadge: { backgroundColor: colors.primary, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.sm },
-  primaryBadgeText: { color: colors.textOnPrimary, fontSize: fontSizes.xs + 1, fontWeight: '700', fontFamily: fonts.heavy },
-  statusChip: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.xl },
-  statusChipText: { color: colors.textOnPrimary, fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy },
+  // ── Category badge ──────────────────────────────────────────
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    marginLeft: spacing.xl,
+    marginBottom: spacing.xl,
+    backgroundColor: '#E0F5F1',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.teal,
+  },
+  categoryBadgeText: {
+    fontSize: fontSizes.xs,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+    color: colors.teal,
+    letterSpacing: 0.5,
+  },
 
-  card: {
-    backgroundColor: 'rgba(255,255,255,0.75)', borderWidth: 1, borderColor: '#E6E6E6',
-    borderRadius: radii.md, padding: spacing.lg, marginBottom: spacing.lg, ...shadows.card,
+  // ── Timeline Container ──────────────────────────────────────
+  timelineContainer: {
+    paddingHorizontal: spacing.xl,
   },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
 
-  consultantCard: {
-    backgroundColor: colors.sectionBg, borderWidth: 1, borderColor: colors.borderInput,
-    padding: spacing.lg, borderRadius: radii.md, flexDirection: 'row',
-    justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg,
+  // ── Round Section ───────────────────────────────────────────
+  roundSection: {
+    flexDirection: 'row',
+    marginBottom: spacing.sm,
   },
-  assignedLabel: { fontSize: fontSizes.sm, color: colors.textSecondary, fontFamily: fonts.medium },
-  assignedValue: { fontSize: fontSizes.sm + 1, fontWeight: '700', color: colors.success, fontFamily: fonts.heavy },
 
-  progressSection: { marginBottom: spacing.lg },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  progressLabel: { fontSize: fontSizes.sm, fontWeight: '700', color: colors.textPrimary, fontFamily: fonts.heavy },
-  progressPercent: { fontSize: fontSizes.sm, fontWeight: '700', color: colors.success, fontFamily: fonts.heavy },
-  progressBarBg: { height: 8, backgroundColor: colors.borderInput, borderRadius: radii.sm, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: colors.success },
+  // Timeline dot column
+  timelineDotCol: {
+    alignItems: 'center',
+    width: 24,
+    marginRight: spacing.md,
+  },
+  timelineDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.borderInput,
+    marginTop: 4,
+  },
+  timelineDotActive: {
+    backgroundColor: colors.orange,
+  },
+  timelineVertLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: colors.borderInput,
+    marginTop: spacing.xs,
+  },
+  timelineVertLineActive: {
+    backgroundColor: '#E8854A50',
+  },
 
-  // Toggle button
-  toggleBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-    paddingVertical: spacing.md, borderRadius: radii.md, marginBottom: spacing.lg,
-    borderWidth: 1.5, borderColor: colors.primary, backgroundColor: 'rgba(255,255,255,0.6)',
+  // Round content
+  roundContent: {
+    flex: 1,
+    paddingBottom: spacing.xl,
   },
-  toggleBtnText: { color: colors.primary, fontSize: fontSizes.sm + 1, fontWeight: '600', fontFamily: fonts.medium },
 
-  // Timeline
-  timelineCard: {
-    backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 1, borderColor: '#E6E6E6',
-    borderRadius: radii.lg, padding: spacing.lg, marginBottom: spacing.lg, ...shadows.card,
+  // Upload header
+  uploadHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
-  timelineTitle: { fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textPrimary, marginBottom: spacing.lg },
-  milestoneRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  timelineCol: { alignItems: 'center', width: 24, marginRight: spacing.md },
-  timelineLine: { width: 2, height: 32, backgroundColor: colors.borderInput, marginVertical: 2 },
-  milestoneText: { flex: 1, paddingBottom: spacing.md },
-  milestoneLabel: { fontSize: fontSizes.sm + 1, fontWeight: '600', fontFamily: fonts.medium, color: colors.textTertiary },
-  milestoneDesc: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textTertiary, marginTop: 1 },
+  uploadHeaderText: {
+    fontSize: fontSizes.sm,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+    color: colors.orange,
+    letterSpacing: 0.3,
+  },
+  uploadHeaderDate: {
+    fontSize: fontSizes.xs + 1,
+    fontFamily: fonts.body,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  uploadHeaderPending: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+    opacity: 0.5,
+  },
+  uploadHeaderTextPending: {
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
+    letterSpacing: 0.3,
+  },
 
-  // Action bar
-  actionBar: {
-    paddingHorizontal: spacing.xl, paddingVertical: 14,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 14,
-    backgroundColor: colors.cardBg, borderTopWidth: 1, borderTopColor: colors.borderCard,
+  // Design preview card (matching Figma — light card with image icon)
+  designPreviewCard: {
+    backgroundColor: '#F0F4F8',
+    borderRadius: radii.lg,
+    paddingVertical: spacing['2xl'],
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    minHeight: 120,
   },
-  reviewBtn: {
-    backgroundColor: colors.primary, paddingVertical: 14, borderRadius: radii.md,
-    alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm,
+  designPreviewImage: {
+    width: '100%',
+    height: 140,
+    borderRadius: radii.md,
+    marginBottom: spacing.md,
   },
-  payBtn: {
-    backgroundColor: colors.success, paddingVertical: 14, borderRadius: radii.md,
-    alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm,
+  designPreviewPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: radii.md,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
-  actionBtnLabel: { color: colors.textOnPrimary, fontSize: fontSizes.md, fontWeight: '700', fontFamily: fonts.heavy },
-  chatBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-    paddingVertical: spacing.md, borderRadius: radii.md, marginTop: spacing.sm,
-    borderWidth: 1.5, borderColor: colors.primary,
+  designPreviewLabel: {
+    fontSize: fontSizes.base,
+    fontWeight: '600',
+    fontFamily: fonts.medium,
+    color: colors.textPrimary,
+    marginBottom: 2,
   },
-  chatBtnText: { color: colors.primary, fontSize: fontSizes.sm + 1, fontWeight: '600', fontFamily: fonts.medium },
+  designPreviewHint: {
+    fontSize: fontSizes.sm,
+    fontFamily: fonts.body,
+    color: colors.textTertiary,
+  },
+
+  // Feedback info bubble
+  feedbackInfoBubble: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: '#E0F5F1',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  feedbackInfoText: {
+    fontSize: fontSizes.xs + 1,
+    fontFamily: fonts.medium,
+    color: colors.teal,
+    flex: 1,
+    lineHeight: 16,
+  },
+
+  // Previous feedback card (italic text from prior round)
+  previousFeedbackCard: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  previousFeedbackText: {
+    fontSize: fontSizes.base,
+    fontFamily: fonts.body,
+    color: colors.textPrimary,
+    fontStyle: 'italic',
+    lineHeight: 22,
+  },
+
+  // Client feedback after submission
+  clientFeedbackCard: {
+    marginBottom: spacing.md,
+  },
+  feedbackDisplayText: {
+    fontSize: fontSizes.base,
+    fontFamily: fonts.body,
+    color: colors.textPrimary,
+    fontStyle: 'italic',
+    lineHeight: 22,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+
+  // Submit reviews button
+  submitReviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.teal,
+    paddingVertical: 14,
+    borderRadius: radii.lg,
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  submitReviewBtnText: {
+    color: colors.textOnPrimary,
+    fontSize: fontSizes.sm + 1,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+  },
+
+  // Final approval note
+  finalApprovalNote: {
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
+  },
+  finalApprovalText: {
+    fontSize: fontSizes.base,
+    fontFamily: fonts.body,
+    color: colors.textPrimary,
+    fontStyle: 'italic',
+    lineHeight: 20,
+  },
+
+  // ── Post-final actions ──────────────────────────────────────
+  postFinalSection: {
+    paddingLeft: 36, // indent past the timeline
+    paddingTop: spacing.md,
+  },
+
+  // Approve design card
+  approveDesignCard: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    minHeight: 100,
+  },
+  approveDesignLabel: {
+    fontSize: fontSizes.base,
+    fontWeight: '600',
+    fontFamily: fonts.medium,
+    color: colors.teal,
+    marginTop: spacing.sm,
+  },
+  approveDesignHint: {
+    fontSize: fontSizes.sm,
+    fontFamily: fonts.body,
+    color: colors.textTertiary,
+    marginTop: 2,
+  },
+
+  // Pay Done button
+  payDoneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.success,
+    paddingVertical: 16,
+    borderRadius: radii.lg,
+    marginBottom: spacing.md,
+    ...shadows.md,
+  },
+  payDoneBtnText: {
+    color: colors.textOnPrimary,
+    fontSize: fontSizes.lg,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+  },
+
+  // Download button
+  downloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.cardBg,
+    paddingVertical: 14,
+    borderRadius: radii.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  downloadBtnText: {
+    color: colors.primary,
+    fontSize: fontSizes.base,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+  },
+
+  // Rate CTA
+  rateCta: {
+    backgroundColor: colors.orange,
+    paddingVertical: 16,
+    borderRadius: radii.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xl,
+    ...shadows.md,
+  },
+  rateCtaText: {
+    color: colors.textOnPrimary,
+    fontSize: fontSizes.lg,
+    fontWeight: '800',
+    fontFamily: fonts.heavy,
+    letterSpacing: 1,
+  },
+
+  // ── Empty state ─────────────────────────────────────────────
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: spacing['5xl'],
+    paddingHorizontal: spacing['3xl'],
+    gap: spacing.md,
+  },
+  emptyTitle: {
+    fontSize: fontSizes.lg,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+    color: colors.textSecondary,
+  },
+  emptySubtitle: {
+    fontSize: fontSizes.sm + 1,
+    fontFamily: fonts.body,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+
+  // ── Bottom Bar ──────────────────────────────────────────────
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    paddingBottom: Platform.OS === 'ios' ? 30 : spacing.md,
+    backgroundColor: colors.cardBg,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderCard,
+    gap: spacing.md,
+  },
+  bottomBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  bottomBackText: {
+    fontSize: fontSizes.base,
+    fontFamily: fonts.medium,
+    color: colors.textPrimary,
+  },
+  bottomChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radii.lg,
+  },
+  bottomChatText: {
+    color: colors.textOnPrimary,
+    fontSize: fontSizes.base,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+  },
 });

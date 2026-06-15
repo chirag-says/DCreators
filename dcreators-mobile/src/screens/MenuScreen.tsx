@@ -8,6 +8,8 @@ import {
 import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 // Static menu items — consultant-only items are filtered at render time
 const MENU_SECTIONS = [
@@ -61,7 +63,7 @@ export default function MenuScreen({ navigation }: any) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* ── Header ── */}
       <View style={styles.header}>
-        <Image source={require('../../assets/dcreators-logo.png')} style={styles.fullLogo} resizeMode="contain" />
+        <Image source={{ uri: RemoteAssets.dcreatorsLogo }} style={styles.fullLogo} resizeMode="contain" />
         <TouchableOpacity style={styles.closeBtn} onPress={() => navigation.goBack()}>
           <X size={20} color={colors.textPrimary} />
         </TouchableOpacity>

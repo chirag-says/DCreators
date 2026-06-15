@@ -6,6 +6,8 @@ import { supabase } from '../lib/supabase';
 import { sendNotification } from '../lib/notifications';
 import { ArrowLeft, Check, RotateCcw, MessageSquare } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function ClientReviewScreen({ navigation, route }: any) {
   const project = route?.params?.project;
@@ -147,7 +149,7 @@ export default function ClientReviewScreen({ navigation, route }: any) {
   const files = submission?.files || [];
 
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} imageStyle={{ opacity: 1 }}>
+    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <TopHeader />
 

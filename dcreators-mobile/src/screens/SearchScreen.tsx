@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, SlidersHorizontal, ChevronLeft, User } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const fontMedium = fonts.medium;
 const fontBody = fonts.body;
@@ -26,10 +28,10 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 // Local images for fallback avatars
 const LOCAL_IMAGES: Record<string, any> = {
-  'dcreators/photographer': require('../../assets/photographer.png'),
-  'dcreators/designer': require('../../assets/designer.png'),
-  'dcreators/sculptor': require('../../assets/sculptor.png'),
-  'dcreators/artisan': require('../../assets/artisan.png'),
+  'dcreators/photographer': { uri: RemoteAssets.photographer },
+  'dcreators/designer': { uri: RemoteAssets.designer },
+  'dcreators/sculptor': { uri: RemoteAssets.sculptor },
+  'dcreators/artisan': { uri: RemoteAssets.artisan },
 };
 
 export default function SearchScreen({ navigation }: any) {
@@ -97,6 +99,11 @@ export default function SearchScreen({ navigation }: any) {
   }
 
   function renderConsultantCard(consultant: any) {
+    const hasRealAvatar = consultant.avatar_url && consultant.avatar_url.startsWith('http');
+    const avatarSource = hasRealAvatar
+      ? { uri: consultant.avatar_url }
+      : LOCAL_IMAGES[`dcreators/${consultant.category}`];
+
     return (
       <TouchableOpacity
         key={consultant.id}
@@ -111,12 +118,13 @@ export default function SearchScreen({ navigation }: any) {
           expertise: consultant.expertise,
           category: consultant.category,
           base_price: consultant.base_price,
-          avatar_public_id: consultant.avatar_url || `dcreators/${consultant.category}`,
+          avatar_url: consultant.avatar_url,
+          portfolio_images: consultant.portfolio_images,
         }})}
       >
         <View style={styles.resultAvatar}>
-          {LOCAL_IMAGES[`dcreators/${consultant.category}`] ? (
-            <Image source={LOCAL_IMAGES[`dcreators/${consultant.category}`]} style={styles.resultAvatarImg} />
+          {avatarSource ? (
+            <Image source={avatarSource} style={styles.resultAvatarImg} />
           ) : (
             <User size={32} color="#9CA3AF" />
           )}
@@ -147,7 +155,7 @@ export default function SearchScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: '#FFF' }]} edges={['top']}>
       <ImageBackground 
-        source={require('../../assets/bg-texture.png')} 
+        source={{ uri: RemoteAssets.bgTexture }} 
         style={styles.backgroundImage}
         imageStyle={{ opacity: 1 }}
       >

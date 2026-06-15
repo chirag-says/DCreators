@@ -5,6 +5,8 @@ import { Bell, CheckCircle, FileText, ChevronLeft, Trash2, CreditCard, AlertCirc
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const ICON_MAP: Record<string, { icon: any; color: string }> = {
   assignment: { icon: FileText, color: colors.primary },
@@ -82,7 +84,7 @@ export default function NotificationsScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.cardBg }]} edges={['top']}>
-      <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} imageStyle={{ opacity: 1 }}>
+      <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
 
         {/* Header */}
         <View style={styles.header}>

@@ -15,6 +15,8 @@ import { createCashfreeOrder, verifyPaymentStatus } from '../lib/cashfree';
 import { sendNotification } from '../lib/notifications';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function PaymentScreen({ navigation, route }: any) {
   const project = route?.params?.project;
@@ -174,7 +176,7 @@ export default function PaymentScreen({ navigation, route }: any) {
   }
 
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} imageStyle={{ opacity: 1 }}>
+    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <TopHeader />
 
@@ -219,9 +221,25 @@ export default function PaymentScreen({ navigation, route }: any) {
                     ? 'Advance paid. The consultant will begin work shortly.'
                     : 'Balance paid. Your project is now complete! 🎉'}
                 </Text>
+                {paymentType === 'balance' && (
+                  <TouchableOpacity
+                    style={[styles.doneBtn, { backgroundColor: '#EAB308', marginBottom: 10 }]}
+                    onPress={() => navigation.replace('RatingReview', { project })}
+                  >
+                    <Text style={styles.doneBtnText}>⭐ Rate & Review</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity style={styles.doneBtn} onPress={() => navigation.navigate('Main')}>
                   <Text style={styles.doneBtnText}>Back to Dashboard</Text>
                 </TouchableOpacity>
+                {paymentType === 'balance' && (
+                  <TouchableOpacity
+                    style={[styles.doneBtn, { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.primary, marginTop: 10 }]}
+                    onPress={() => navigation.navigate('Invoice', { project })}
+                  >
+                    <Text style={[styles.doneBtnText, { color: colors.primary }]}>View Invoice</Text>
+                  </TouchableOpacity>
+                )}
               </Animated.View>
             ) : verifying ? (
               <View style={styles.verifyingCard}>

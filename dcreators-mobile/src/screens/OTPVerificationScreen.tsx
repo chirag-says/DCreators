@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function OTPVerificationScreen({ navigation, route }: any) {
   const email = route?.params?.email || '';
@@ -78,7 +80,7 @@ export default function OTPVerificationScreen({ navigation, route }: any) {
 
   return (
     <ImageBackground 
-      source={require('../../assets/bg-texture.png')} 
+      source={{ uri: RemoteAssets.bgTexture }} 
       style={styles.backgroundImage}
       imageStyle={{ opacity: 1 }}
     >

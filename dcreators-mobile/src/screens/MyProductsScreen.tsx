@@ -5,6 +5,8 @@ import { ChevronLeft, Plus, Package, Edit3, Trash2, Eye, EyeOff } from 'lucide-r
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function MyProductsScreen({ navigation }: any) {
   const consultantProfile = useAuthStore((s) => s.consultantProfile);
@@ -90,7 +92,7 @@ export default function MyProductsScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.cardBg }]} edges={['top']}>
-      <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} imageStyle={{ opacity: 1 }}>
+      <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
 
         {/* Header */}
         <View style={styles.header}>

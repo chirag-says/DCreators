@@ -5,12 +5,14 @@ import { ChevronLeft, Star, Bookmark, Trash2, User, Heart } from 'lucide-react-n
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const LOCAL_IMAGES: Record<string, any> = {
-  'dcreators/photographer': require('../../assets/photographer.png'),
-  'dcreators/designer': require('../../assets/designer.png'),
-  'dcreators/sculptor': require('../../assets/sculptor.png'),
-  'dcreators/artisan': require('../../assets/artisan.png'),
+  'dcreators/photographer': { uri: RemoteAssets.photographer },
+  'dcreators/designer': { uri: RemoteAssets.designer },
+  'dcreators/sculptor': { uri: RemoteAssets.sculptor },
+  'dcreators/artisan': { uri: RemoteAssets.artisan },
 };
 
 const STORAGE_KEY = '@dcreators_saved_creators';
@@ -83,7 +85,7 @@ export default function SavedCreatorsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.cardBg }]} edges={['top']}>
       <ImageBackground 
-        source={require('../../assets/bg-texture.png')} 
+        source={{ uri: RemoteAssets.bgTexture }} 
         style={styles.backgroundImage}
         imageStyle={{ opacity: 1 }}
       >
@@ -111,7 +113,13 @@ export default function SavedCreatorsScreen({ navigation }: any) {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           >
             <View style={styles.container}>
-              {savedCreators.map((creator) => (
+              {savedCreators.map((creator) => {
+                const hasRealAvatar = creator.avatar_url && creator.avatar_url.startsWith('http');
+                const avatarSource = hasRealAvatar
+                  ? { uri: creator.avatar_url }
+                  : LOCAL_IMAGES[`dcreators/${creator.category}`];
+
+                return (
                 <TouchableOpacity 
                   key={creator.id} 
                   style={styles.creatorCard}
@@ -125,13 +133,14 @@ export default function SavedCreatorsScreen({ navigation }: any) {
                       expertise: creator.expertise,
                       category: creator.category,
                       base_price: creator.base_price,
-                      avatar_public_id: creator.avatar_url || `dcreators/${creator.category}`,
+                      avatar_url: creator.avatar_url,
+                      portfolio_images: creator.portfolio_images,
                     }
                   })}
                 >
-                  {LOCAL_IMAGES[`dcreators/${creator.category}`] ? (
+                  {avatarSource ? (
                     <Image
-                      source={LOCAL_IMAGES[`dcreators/${creator.category}`]}
+                      source={avatarSource}
                       style={styles.avatarImage}
                     />
                   ) : (
@@ -162,7 +171,8 @@ export default function SavedCreatorsScreen({ navigation }: any) {
                     <Trash2 size={16} color={colors.error} />
                   </TouchableOpacity>
                 </TouchableOpacity>
-              ))}
+                );
+              })}
             </View>
           </ScrollView>
         )}

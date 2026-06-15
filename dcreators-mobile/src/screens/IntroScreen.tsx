@@ -4,33 +4,37 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ImageBackground,
   Image,
-  Platform,
   Dimensions,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Users, Palette, ChevronLeft } from 'lucide-react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/useAuthStore';
-import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
 
 const { width } = Dimensions.get('window');
 
-export default function IntroScreen({ navigation, route }: any) {
-  const userName = route?.params?.userName || 'User';
-  const { setRole, consultantProfile, profile } = useAuthStore();
+// ─── Color tokens (from Figma) ──────────────────────────────
+const CLIENT_BG   = '#E8ECF4';  // muted blue-gray tint for icon zone
+const CONSULT_BG  = '#FDF0E4';  // warm peach tint for icon zone
+const CLIENT_PILL = '#1A2560';  // dark navy pill
+const CONSULT_PILL = '#C84B0F'; // burnt orange pill
+const CLIENT_ICON  = '#1A2560';
+const CONSULT_ICON = '#C84B0F';
 
-  const displayName = profile?.name || userName;
+// ─────────────────────────────────────────────────────────────
+export default function IntroScreen({ navigation, route }: any) {
+  const { setRole, consultantProfile, profile } = useAuthStore();
 
   function handleRole(role: 'viewer' | 'creator') {
     if (role === 'creator') {
       setRole('consultant');
       if (consultantProfile) {
-        // Already onboarded as consultant — go to dashboard
         navigation.reset({ index: 0, routes: [{ name: 'Main', params: { screen: 'Dashboard' } }] });
       } else {
-        // Needs consultant onboarding
         navigation.navigate('CreatorOnboarding');
       }
     } else {
@@ -40,160 +44,229 @@ export default function IntroScreen({ navigation, route }: any) {
   }
 
   return (
-    <ImageBackground
-      source={require('../../assets/bg-texture.png')}
-      style={styles.bg}
-      resizeMode="cover"
-    >
-      <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
-          {/* Top spacer */}
-          <View style={{ height: spacing['4xl'] }} />
-
-          {/* Logo — centered (Figma A1.4) */}
-          <View style={styles.logoWrap}>
-            <Image
-              source={require('../../assets/dcreators-logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </View>
-
-          {/* Spacer before cards */}
-          <View style={{ height: spacing['4xl'] }} />
-
-          {/* Role Cards (Figma A1.4) */}
-          <View style={styles.cardsContainer}>
-
-            {/* Viewer / Client Card */}
-            <TouchableOpacity
-              style={[styles.roleCard, styles.clientCard]}
-              activeOpacity={0.85}
-              onPress={() => handleRole('viewer')}
-            >
-              <Text style={styles.roleJoinAs}>Join as</Text>
-              <Text style={[styles.roleTitle, { color: colors.textPrimary }]}>VIEWER/CLIENT</Text>
-              <Text style={styles.roleDesc}>Hire Creative Consultant</Text>
-              <Text style={styles.roleDesc}>Assign Projects</Text>
-              <Text style={styles.roleDesc}>Buy Artwork</Text>
-
-              {/* Icon circle — orange (Client) */}
-              <View style={[styles.roleIconCircle, { backgroundColor: colors.orange }]}>
-                <Users size={24} color="#fff" strokeWidth={2} />
-              </View>
-            </TouchableOpacity>
-
-            {/* Creative Consultant Card */}
-            <TouchableOpacity
-              style={[styles.roleCard, styles.consultantCard]}
-              activeOpacity={0.85}
-              onPress={() => handleRole('creator')}
-            >
-              <Text style={styles.roleJoinAs}>Join as</Text>
-              <Text style={[styles.roleTitle, { color: colors.textPrimary }]}>CREATIVE CONSULTANT</Text>
-              <Text style={styles.roleDesc}>Explore Creative Projects</Text>
-              <Text style={styles.roleDesc}>Grow Business</Text>
-              <Text style={styles.roleDesc}>Sell Artwork</Text>
-
-              {/* Icon circle — indigo (Consultant) */}
-              <View style={[styles.roleIconCircle, { backgroundColor: colors.primary }]}>
-                <Palette size={24} color="#fff" strokeWidth={2} />
-              </View>
-            </TouchableOpacity>
-
-          </View>
-
-        </ScrollView>
-
-        {/* Bottom bar with back chevron (Figma pattern) */}
-        <View style={styles.bottomBar}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <ChevronLeft size={24} color={colors.textPrimary} strokeWidth={2} />
-          </TouchableOpacity>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* ── Logo + tagline ──────────────────────── */}
+        <View style={styles.logoSection}>
+          <Image
+            source={{ uri: RemoteAssets.dcreatorsLogo }}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.tagline}>HIRE CREATIVES. BUY ART. BUILD IDEAS</Text>
         </View>
-      </SafeAreaView>
-    </ImageBackground>
+
+        {/* ── Divider ─────────────────────────────── */}
+        <View style={styles.divider} />
+
+        {/* ── Headline ────────────────────────────── */}
+        <Text style={styles.headline}>
+          How would you like to use Dcreators?
+        </Text>
+        <Text style={styles.subheadline}>
+          Select your path. You can switch roles later in settings.
+        </Text>
+
+        {/* ── CLIENT PORTAL card ──────────────────── */}
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => handleRole('viewer')}
+          activeOpacity={0.88}
+        >
+          {/* Icon zone — blue-gray tint */}
+          <View style={[styles.iconZone, { backgroundColor: CLIENT_BG }]}>
+            <MaterialCommunityIcons name="account-search" size={72} color={CLIENT_ICON} />
+            <View style={[styles.pill, { backgroundColor: CLIENT_PILL }]}>
+              <Text style={styles.pillText}>CLIENT PORTAL</Text>
+            </View>
+          </View>
+
+          {/* Text zone — white */}
+          <View style={styles.textZone}>
+            <Text style={styles.cardDesc}>
+              I want to hire creative consultant/Assign Project/ Buy Artwork
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* ── CONSULTANT PORTAL card ──────────────── */}
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => handleRole('creator')}
+          activeOpacity={0.88}
+        >
+          {/* Icon zone — warm peach tint */}
+          <View style={[styles.iconZone, { backgroundColor: CONSULT_BG }]}>
+            <MaterialCommunityIcons name="pencil-ruler" size={72} color={CONSULT_ICON} />
+            <View style={[styles.pill, { backgroundColor: CONSULT_PILL }]}>
+              <Text style={styles.pillText}>CONSULTANT PORTAL</Text>
+            </View>
+          </View>
+
+          {/* Text zone — white */}
+          <View style={styles.textZone}>
+            <Text style={styles.cardDesc}>
+              I want to explore the Creative Projects/ grow my creative business
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* ── Footer attribution ───────────────────── */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            A Joint Venture of{' '}
+            <Text style={styles.footerBold}>Ishisoft Pvt.Ltd</Text>,{' '}
+            <Text style={styles.footerBold}>Mr. Shoumik Mazumder</Text> and
+          </Text>
+          <Text style={styles.footerText}>
+            <Text style={styles.footerBold}>Design &amp; Animation Club</Text>,
+            Department of Visual Arts, AUS
+          </Text>
+          <Text style={styles.footerText}>
+            Honorary Design Mentor -{' '}
+            <Text style={styles.footerBold}>Dr. Gautam Dutta</Text>,
+            Department of Visual Arts, AUS
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
+// ─────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: colors.screenBg },
-  safe: { flex: 1 },
-  scroll: { paddingHorizontal: spacing['2xl'], paddingBottom: spacing['4xl'] },
+  root: {
+    flex: 1,
+    backgroundColor: colors.screenBg,
+  },
+  scroll: {
+    flexGrow: 1,
+    paddingBottom: spacing['3xl'],
+  },
 
-  // Logo
-  logoWrap: { alignItems: 'center', marginBottom: spacing.lg },
-  logo: { width: width * 0.75, height: 130 },
-
-  // Cards
-  cardsContainer: { gap: spacing['3xl'] },
-
-  // Role card base
-  roleCard: {
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderRadius: radii.xl,
-    paddingTop: spacing['2xl'],
+  // ── Logo ─────────────────────────────────────
+  logoSection: {
+    alignItems: 'center',
     paddingHorizontal: spacing['2xl'],
-    paddingBottom: spacing['4xl'],
-    alignItems: 'center',
-    borderWidth: 1,
-    ...shadows.md,
-  },
-
-  // Client card — indigo border (Figma A1.4)
-  clientCard: {
-    borderColor: colors.primary,
-  },
-
-  // Consultant card — teal border (Figma A1.4)
-  consultantCard: {
-    borderColor: colors.teal,
-  },
-
-  roleJoinAs: {
-    fontSize: fontSizes.base,
-    fontFamily: fonts.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  roleTitle: {
-    fontSize: fontSizes.xl,
-    fontFamily: fonts.heavy,
-    fontWeight: '700',
+    paddingTop: 0,
     marginBottom: spacing.md,
-    textAlign: 'center',
-    letterSpacing: 0.5,
   },
-  roleDesc: {
-    fontSize: fontSizes.sm,
+  logo: {
+    width: width * 0.85,
+    height: 100,
+    marginBottom: spacing.sm,
+  },
+  tagline: {
+    fontSize: fontSizes.xs,
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
+    letterSpacing: 1.4,
+  },
+
+  // ── Divider ──────────────────────────────────
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginBottom: spacing['2xl'],
+  },
+
+  // ── Headline ─────────────────────────────────
+  headline: {
+    fontSize: fontSizes['3xl'] + 2,
+    fontWeight: '800',
+    fontFamily: fonts.heavy,
+    color: CLIENT_PILL,            // dark navy — matches Figma exactly
+    textAlign: 'center',
+    lineHeight: 40,
+    paddingHorizontal: spacing['2xl'],
+    marginBottom: spacing.lg,
+  },
+  subheadline: {
+    fontSize: fontSizes.base + 1,
     fontFamily: fonts.body,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 24,
+    paddingHorizontal: spacing['3xl'],
+    marginBottom: spacing['3xl'],
   },
 
-  // Overlapping icon circle at card bottom
-  roleIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  // ── Cards ────────────────────────────────────
+  card: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
+    borderRadius: radii.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.07,
+        shadowRadius: 10,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+
+  // Top tinted icon zone
+  iconZone: {
+    paddingTop: spacing['3xl'],
+    paddingBottom: spacing['2xl'],
     alignItems: 'center',
-    justifyContent: 'center',
-    position: 'absolute',
-    bottom: -28,
-    ...shadows.md,
+    gap: spacing.xl,
   },
 
-  // Bottom bar
-  bottomBar: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderTopWidth: 0.5,
-    borderTopColor: colors.borderLight,
+  // Pill label
+  pill: {
+    paddingHorizontal: spacing['2xl'],
+    paddingVertical: spacing.sm,
+    borderRadius: 4,
   },
-  backBtn: {
-    padding: spacing.xs,
+  pillText: {
+    color: '#fff',
+    fontSize: fontSizes.sm,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+    letterSpacing: 1.2,
+  },
+
+  // Bottom white text zone
+  textZone: {
+    backgroundColor: '#fff',
+    paddingHorizontal: spacing['2xl'],
+    paddingVertical: spacing.xl,
+  },
+  cardDesc: {
+    fontSize: fontSizes.md,
+    fontFamily: fonts.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 26,
+  },
+
+  // ── Footer ────────────────────────────────────
+  footer: {
+    alignItems: 'center',
+    gap: 3,
+    paddingTop: spacing.xl,
+    paddingHorizontal: spacing['2xl'],
+  },
+  footerText: {
+    fontSize: fontSizes.xs + 1,
+    fontFamily: fonts.body,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  footerBold: {
+    fontFamily: fonts.heavy,
+    color: colors.textSecondary,
+    fontWeight: '700',
   },
 });

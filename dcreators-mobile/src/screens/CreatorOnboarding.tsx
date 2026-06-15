@@ -10,6 +10,8 @@ import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, fonts, fontSizes, spacing, radii, shadows, inputStyle } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const CATEGORIES = [
   'Photography', 'Videography', 'Design', 'Painting',
@@ -95,6 +97,32 @@ export default function CreatorOnboarding({ navigation, route }: any) {
     Alert.alert('Saved', 'Your progress has been saved locally. Tap Submit when you\'re ready to finalize.');
   }
 
+  async function uploadToCloud(localUri: string): Promise<string> {
+    const cloudName = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
+    if (!cloudName || localUri.startsWith('http')) return localUri;
+    try {
+      const formData = new FormData();
+      const filename = localUri.split('/').pop() || 'image.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+      formData.append('file', { uri: localUri, name: filename, type } as any);
+      formData.append('upload_preset', 'dcreators_unsigned');
+      formData.append('folder', 'dcreators/profiles');
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.secure_url) {
+        console.error('[Cloudinary] Upload failed:', data.error?.message || JSON.stringify(data));
+        Alert.alert('Image Upload Issue', `Could not upload image: ${data.error?.message || 'Unknown error'}. Your profile will be saved without this image.`);
+        return '';
+      }
+      return data.secure_url;
+    } catch (err: any) {
+      console.error('[Cloudinary] Upload error:', err.message);
+      Alert.alert('Image Upload Issue', `Network error uploading image: ${err.message}. Your profile will be saved without this image.`);
+      return '';
+    }
+  }
+
   async function handleSubmit() {
     if (!profile?.id) {
       Alert.alert('Error', 'You must be logged in to submit.');
@@ -107,6 +135,24 @@ export default function CreatorOnboarding({ navigation, route }: any) {
 
     setIsSaving(true);
     try {
+      // Get the ACTUAL auth user ID from the current Supabase session
+      // This guarantees it matches auth.uid() in the RLS policy
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const actualUserId = authUser?.id;
+
+      if (!actualUserId) {
+        Alert.alert('Session Error', 'Your session has expired. Please log in again.');
+        setIsSaving(false);
+        return;
+      }
+
+      // Debug: Log the IDs to catch mismatches
+      console.log('[CreatorOnboarding] profile.id:', profile.id);
+      console.log('[CreatorOnboarding] auth.uid():', actualUserId);
+      if (profile.id !== actualUserId) {
+        console.warn('[CreatorOnboarding] ⚠️ ID MISMATCH! profile.id !== auth.uid()');
+      }
+
       // Generate a unique consultant code
       const code = `D${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
@@ -114,13 +160,19 @@ export default function CreatorOnboarding({ navigation, route }: any) {
       const firstFee = Object.values(consultancyFees)[0];
       const basePrice = firstFee ? parseFloat(firstFee) : null;
 
-      // Collect uploaded portfolio image URIs
-      const portfolioImageUris = portfolioItems
+      // Upload avatar to cloud
+      const avatarUrl = profileImage ? await uploadToCloud(profileImage) : null;
+
+      // Upload portfolio images to cloud
+      const localPortfolioUris = portfolioItems
         .filter(item => item.imageUri)
         .map(item => item.imageUri);
+      const portfolioImageUrls = (await Promise.all(localPortfolioUris.map(uri => uploadToCloud(uri)))).filter(url => url !== '');
 
+      // Use actualUserId (from auth session) instead of profile.id
+      // to guarantee RLS auth.uid() = user_id check passes
       const { error } = await supabase.from('consultant_profiles').insert({
-        user_id: profile.id,
+        user_id: actualUserId,
         display_name: creatorName,
         code,
         category: mapCategory(selectedCategories),
@@ -128,10 +180,10 @@ export default function CreatorOnboarding({ navigation, route }: any) {
         experience: selectedExperience,
         expertise: selectedCategories.join(', '),
         bio: null,
-        avatar_url: profileImage || null,
-        portfolio_images: portfolioImageUris,
+        avatar_url: avatarUrl,
+        portfolio_images: portfolioImageUrls,
         base_price: basePrice,
-        is_approved: false,
+        is_approved: true,
         is_active: true,
       });
 
@@ -167,7 +219,7 @@ export default function CreatorOnboarding({ navigation, route }: any) {
   }
 
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} resizeMode="cover">
+    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} resizeMode="cover">
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <TopHeader />
 

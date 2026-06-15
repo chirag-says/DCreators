@@ -5,6 +5,8 @@ import { User, Bell, Shield, HelpCircle, LogOut, ChevronRight, ChevronLeft } fro
 import TopHeader from '../components/TopHeader';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function SettingsScreen({ navigation }: any) {
   const [notifications, setNotifications] = React.useState(true);
@@ -20,7 +22,7 @@ export default function SettingsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.cardBg }]} edges={['top']}>
       <ImageBackground 
-        source={require('../../assets/bg-texture.png')} 
+        source={{ uri: RemoteAssets.bgTexture }} 
         style={styles.backgroundImage}
         imageStyle={{ opacity: 1 }}
       >

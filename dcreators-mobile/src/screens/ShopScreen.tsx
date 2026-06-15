@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, Filter, ShoppingBag, Heart } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const fontMedium = fonts.medium;
 const fontBody = fonts.body;
@@ -31,10 +33,13 @@ export default function ShopScreen({ navigation }: any) {
         const dbProducts = data.map((p: any) => ({
           id: p.id,
           title: p.title,
+          description: p.description,
           category: p.category || 'Other',
           price: Number(p.price),
+          images: p.images || [],
+          consultant_profiles: p.consultant_profiles,
           creator: `${p.consultant_profiles?.code || '---'} / ${p.consultant_profiles?.display_name?.split(' ')[0] || 'Creator'}`,
-          image: p.images?.[0] ? { uri: p.images[0] } : require('../../assets/designer.png'),
+          image: p.images?.[0] ? { uri: p.images[0] } : { uri: RemoteAssets.designer },
         }));
         setProducts(dbProducts);
       } else {
@@ -53,7 +58,7 @@ export default function ShopScreen({ navigation }: any) {
   });
 
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} imageStyle={{ opacity: 1 }}>
+    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
 
         {/* Header */}
@@ -104,7 +109,7 @@ export default function ShopScreen({ navigation }: any) {
 
             {/* Featured Banner */}
             <View style={styles.featuredSection}>
-              <ImageBackground source={require('../../assets/photographer.png')} style={styles.featuredCard} imageStyle={{ opacity: 0.6 }}>
+              <ImageBackground source={{ uri: RemoteAssets.photographer }} style={styles.featuredCard} imageStyle={{ opacity: 0.6 }}>
                 <View style={[styles.featuredContent, { backgroundColor: 'rgba(67, 56, 202, 0.7)' }]}>
                   <Text style={styles.featuredBadge}>FEATURED BUNDLE</Text>
                   <Text style={styles.featuredTitle}>The Ultimate Designer's Toolkit 2026</Text>

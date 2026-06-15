@@ -3,13 +3,15 @@ import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function TermsScreen({ navigation }: any) {
   const [accepted, setAccepted] = useState(false);
 
   return (
     <ImageBackground 
-      source={require('../../assets/bg-texture.png')} 
+      source={{ uri: RemoteAssets.bgTexture }} 
       style={styles.backgroundImage}
       imageStyle={{ opacity: 1 }}
     >

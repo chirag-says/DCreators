@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, ScrollView
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Share2, Heart, Download } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const { width, height } = Dimensions.get('window');
 
@@ -38,7 +40,7 @@ export default function PortfolioGalleryScreen({ navigation, route }: any) {
         showsHorizontalScrollIndicator={false}
       >
         <Image 
-          source={require('../../assets/photo_archive_1.png')} 
+          source={{ uri: RemoteAssets.photoArchive1 }} 
           style={styles.fullImage}
           resizeMode="contain"
         />

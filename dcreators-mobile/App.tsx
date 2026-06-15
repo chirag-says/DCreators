@@ -4,11 +4,15 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import BottomNavigation from './src/components/BottomNavigation';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import type { RootStackParamList, MainTabParamList } from './src/types/navigation';
 
 import AnimatedSplashScreen from './src/screens/AnimatedSplashScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import EmailLoginScreen from './src/screens/EmailLoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import IntroScreen from './src/screens/IntroScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
@@ -42,11 +46,12 @@ import ProductDetailsScreen from './src/screens/ProductDetailsScreen';
 import MenuScreen from './src/screens/MenuScreen';
 import MessagesListScreen from './src/screens/MessagesListScreen';
 import EditConsultantProfileScreen from './src/screens/EditConsultantProfileScreen';
+import CollaborationDashboard from './src/screens/CollaborationDashboard';
 import MyProductsScreen from './src/screens/MyProductsScreen';
 import AddEditProductScreen from './src/screens/AddEditProductScreen';
 
-const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs() {
   return (
@@ -73,50 +78,56 @@ export default function App() {
   }, []);
 
   return (
-    <NavigationContainer>
-      <StatusBar style="dark" />
-      <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#e8e8e8' } }} initialRouteName="Splash">
-        <Stack.Screen name="Splash" component={AnimatedSplashScreen} />
-        <Stack.Screen name="Welcome" component={WelcomeScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Register" component={RegisterScreen} options={{ animation: 'fade' }} />
-        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-        <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
-        <Stack.Screen name="Intro" component={IntroScreen} />
-        <Stack.Screen name="CreatorOnboarding" component={CreatorOnboarding} />
-        <Stack.Screen name="ClientOnboarding" component={ClientOnboardingScreen} />
-        
-        {/* Main Logged-In Flow with Fixed Bottom Navigation */}
-        <Stack.Screen name="Main" component={MainTabs} />
+    <ErrorBoundary>
+      <SafeAreaProvider>
+      <NavigationContainer>
+        <StatusBar style="dark" />
+        <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#e8e8e8' } }} initialRouteName="Splash">
+          <Stack.Screen name="Splash" component={AnimatedSplashScreen} />
+          <Stack.Screen name="Welcome" component={WelcomeScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="EmailLogin" component={EmailLoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} options={{ animation: 'fade' }} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
+          <Stack.Screen name="Intro" component={IntroScreen} />
+          <Stack.Screen name="CreatorOnboarding" component={CreatorOnboarding} />
+          <Stack.Screen name="ClientOnboarding" component={ClientOnboardingScreen} />
+          
+          {/* Main Logged-In Flow with Fixed Bottom Navigation */}
+          <Stack.Screen name="Main" component={MainTabs} />
 
-        {/* Sub-screens (Bottom Nav hidden automatically when pushed) */}
-        <Stack.Screen name="Settings" component={SettingsScreen} />
-        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-        <Stack.Screen name="EditConsultantProfile" component={EditConsultantProfileScreen} />
-        <Stack.Screen name="AssignMultiple" component={AssignMultipleScreen} />
-        <Stack.Screen name="Terms" component={TermsScreen} />
-        <Stack.Screen name="FinalizeOffer" component={FinalizeOfferScreen} />
-        <Stack.Screen name="ClientWorkorder" component={ClientWorkorderScreen} />
-        <Stack.Screen name="ClientReview" component={ClientReviewScreen} />
-        <Stack.Screen name="Payment" component={PaymentScreen} />
+          {/* Sub-screens (Bottom Nav hidden automatically when pushed) */}
+          <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+          <Stack.Screen name="EditConsultantProfile" component={EditConsultantProfileScreen} />
+          <Stack.Screen name="AssignMultiple" component={AssignMultipleScreen} />
+          <Stack.Screen name="Terms" component={TermsScreen} />
+          <Stack.Screen name="FinalizeOffer" component={FinalizeOfferScreen} />
+          <Stack.Screen name="ClientWorkorder" component={ClientWorkorderScreen} />
+          <Stack.Screen name="ClientReview" component={ClientReviewScreen} />
+          <Stack.Screen name="CollaborationDashboard" component={CollaborationDashboard} />
+          <Stack.Screen name="Payment" component={PaymentScreen} />
 
-        {/* Modals and Overlays */}
-        <Stack.Screen name="Filter" component={FilterScreen} options={{ presentation: 'modal' }} />
-        <Stack.Screen name="PortfolioGallery" component={PortfolioGalleryScreen} options={{ presentation: 'fullScreenModal' }} />
-        
-        {/* Full screen features where bottom nav is usually hidden */}
-        <Stack.Screen name="Notifications" component={NotificationsScreen} />
-        <Stack.Screen name="Chat" component={ChatScreen} />
-        <Stack.Screen name="Invoice" component={InvoiceScreen} />
-        <Stack.Screen name="SavedCreators" component={SavedCreatorsScreen} />
-        <Stack.Screen name="RatingReview" component={RatingReviewScreen} />
-        <Stack.Screen name="Shop" component={ShopScreen} />
-        <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
-        <Stack.Screen name="Menu" component={MenuScreen} options={{ animation: 'slide_from_left' }} />
-        <Stack.Screen name="MessagesList" component={MessagesListScreen} />
-        <Stack.Screen name="MyProducts" component={MyProductsScreen} />
-        <Stack.Screen name="AddEditProduct" component={AddEditProductScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+          {/* Modals and Overlays */}
+          <Stack.Screen name="Filter" component={FilterScreen} options={{ presentation: 'modal' }} />
+          <Stack.Screen name="PortfolioGallery" component={PortfolioGalleryScreen} options={{ presentation: 'fullScreenModal' }} />
+          
+          {/* Full screen features where bottom nav is usually hidden */}
+          <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="Chat" component={ChatScreen} />
+          <Stack.Screen name="Invoice" component={InvoiceScreen} />
+          <Stack.Screen name="SavedCreators" component={SavedCreatorsScreen} />
+          <Stack.Screen name="RatingReview" component={RatingReviewScreen} />
+          <Stack.Screen name="Shop" component={ShopScreen} />
+          <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
+          <Stack.Screen name="Menu" component={MenuScreen} options={{ animation: 'slide_from_left' }} />
+          <Stack.Screen name="MessagesList" component={MessagesListScreen} />
+          <Stack.Screen name="MyProducts" component={MyProductsScreen} />
+          <Stack.Screen name="AddEditProduct" component={AddEditProductScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

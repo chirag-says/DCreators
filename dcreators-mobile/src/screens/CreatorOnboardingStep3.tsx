@@ -5,6 +5,8 @@ import { ChevronLeft, CheckCircle2 } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function CreatorOnboardingStep3({ navigation, route }: any) {
   const { onboardingData } = route.params || {};
@@ -65,7 +67,7 @@ export default function CreatorOnboardingStep3({ navigation, route }: any) {
   ];
 
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} resizeMode="cover">
+    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} resizeMode="cover">
       <SafeAreaView style={styles.safe}>
 
         {/* Header */}

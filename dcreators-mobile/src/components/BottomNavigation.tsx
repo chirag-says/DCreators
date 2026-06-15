@@ -2,14 +2,14 @@ import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
 import { Home, Search, Clock, CheckCircle, ShoppingCart, MessageSquare, FileText, User } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
-
-const IOS_BOTTOM_PADDING = Platform.OS === 'ios' ? 28 : 0;
 
 export default function BottomNavigation({ state, navigation: tabNavigation }: any) {
   const stackNavigation = useNavigation<any>();
   const navigation = tabNavigation || stackNavigation;
+  const insets = useSafeAreaInsets();
   const currentRole = useAuthStore((s) => s.currentRole);
   const consultantProfile = useAuthStore((s) => s.consultantProfile);
   const profile = useAuthStore((s) => s.profile);
@@ -126,7 +126,7 @@ export default function BottomNavigation({ state, navigation: tabNavigation }: a
       )}
 
       {/* Bottom Navigation Tabs */}
-      <View style={styles.navBar}>
+      <View style={[styles.navBar, { paddingBottom: Math.max(10, insets.bottom) }]}>
         {tabs.map((tab) => {
           const isActive = currentRouteName === tab.name;
           const IconComponent = tab.icon;
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingTop: 10,
-    paddingBottom: 10 + IOS_BOTTOM_PADDING,
+    // paddingBottom is applied dynamically via insets
   },
   navItem: {
     alignItems: 'center',

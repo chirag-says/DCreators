@@ -3,6 +3,8 @@ import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Camera, ChevronLeft } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function EditProfileScreen({ navigation }: any) {
   const [name, setName] = useState('John Doe');
@@ -11,7 +13,7 @@ export default function EditProfileScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.cardBg }]} edges={['top']}>
-      <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} imageStyle={{ opacity: 1 }}>
+      <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><ChevronLeft size={28} color={colors.textPrimary} /></TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Profile</Text>

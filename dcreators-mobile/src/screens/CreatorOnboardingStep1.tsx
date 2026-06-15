@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, Keyboard
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ArrowRight } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function CreatorOnboardingStep1({ navigation }: any) {
   const [subtitle, setSubtitle] = useState('');
@@ -19,7 +21,7 @@ export default function CreatorOnboardingStep1({ navigation }: any) {
   const canContinue = subtitle.length > 0 && category.length > 0;
 
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} resizeMode="cover">
+    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} resizeMode="cover">
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
 

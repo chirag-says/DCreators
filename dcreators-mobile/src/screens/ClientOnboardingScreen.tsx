@@ -3,11 +3,13 @@ import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function ClientOnboardingScreen({ navigation }: any) {
   return (
     <ImageBackground 
-      source={require('../../assets/bg-texture.png')} 
+      source={{ uri: RemoteAssets.bgTexture }} 
       style={styles.backgroundImage}
       imageStyle={{ opacity: 1 }}
     >

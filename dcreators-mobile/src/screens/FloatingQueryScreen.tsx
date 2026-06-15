@@ -6,6 +6,8 @@ import TopHeader from '../components/TopHeader';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const DISCIPLINES = ['Photography', 'Design', 'Videography', 'Sculpture', 'Artisan', 'Other'];
 const BUDGET_RANGES = ['Under ₹10,000', '₹10,000 - ₹25,000', '₹25,000 - ₹50,000', '₹50,000 - ₹1,00,000', 'Above ₹1,00,000'];
@@ -96,7 +98,7 @@ export default function FloatingQueryScreen({ navigation }: any) {
   }
 
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} imageStyle={{ opacity: 1 }}>
+    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <TopHeader />
 

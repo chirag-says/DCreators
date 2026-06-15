@@ -1,573 +1,459 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, TextInput, Platform, Alert, ActivityIndicator, Image, Modal } from 'react-native';
+// ============================================================
+// CreatorWorkorderScreen — Consultant Project Flow (Figma Match)
+// ============================================================
+// Matches: "Negotition.png"
+// Shows round-by-round: client feedback → upload slot → submit
+// ============================================================
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  TextInput, Platform, Alert, ActivityIndicator, Image, Modal,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
 import { supabase } from '../lib/supabase';
 import { sendNotification } from '../lib/notifications';
 import * as ImagePicker from 'expo-image-picker';
-import { X, ImagePlus, Upload, MessageCircle } from 'lucide-react-native';
+import {
+  FileText, ImageIcon, Info, X, ImagePlus, Upload,
+  MessageCircle, ChevronRight, Download,
+} from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import type { Submission } from '../types';
+
+const ROUND_META: Record<string, { label: string; uploadLabel: string; submitLabel: string }> = {
+  review_1: {
+    label: '1ST FEEDBACK',
+    uploadLabel: 'Upload Design for 2nd Review',
+    submitLabel: 'Submit for 2nd Design Review',
+  },
+  review_2: {
+    label: '2ND FEEDBACK',
+    uploadLabel: 'Upload Design final Review',
+    submitLabel: 'Submit for final Review',
+  },
+  final: {
+    label: 'FINAL FEEDBACK',
+    uploadLabel: 'Upload Design For Final Approval',
+    submitLabel: 'Release The Final Design',
+  },
+};
 
 export default function CreatorWorkorderScreen({ navigation, route }: any) {
   const project = route?.params?.project;
-
-  const [milestone1, setMilestone1] = useState(project?.milestone_1_date || '');
-  const [milestone2, setMilestone2] = useState(project?.milestone_2_date || '');
-  const [finalDate, setFinalDate] = useState(project?.final_date || '');
-  const [finalOffer, setFinalOffer] = useState(project?.final_offer ? String(project.final_offer) : '');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Upload state
-  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadRound, setUploadRound] = useState<'review_1' | 'review_2' | 'final' | null>(null);
   const [uploadFiles, setUploadFiles] = useState<string[]>([]);
   const [uploadNote, setUploadNote] = useState('');
-  const [selectedRound, setSelectedRound] = useState<'review_1' | 'review_2' | 'final'>('review_1');
   const [isUploading, setIsUploading] = useState(false);
 
-  const assignmentNo = project
-    ? `${project.id.slice(0, 4).toUpperCase()}/${new Date(project.created_at).getMonth() + 1}/${new Date(project.created_at).getFullYear().toString().slice(2)}`
-    : '----/--/--';
+  const projectCode = project
+    ? `D/${new Date(project.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '/')}`
+    : 'D/--/--/--';
 
   const status = project?.status || 'pending';
-  const isAccepted = status !== 'pending';
-  const budget = project?.budget ? Number(project.budget) : 0;
-  const advance = Math.round(budget * 0.5);
+  const assignmentType = project?.assignment_type
+    ? project.assignment_type.charAt(0).toUpperCase() + project.assignment_type.slice(1).replace(/_/g, ' ')
+    : 'Creative Service';
 
-  async function handleAccept() {
+  const fetchSubmissions = useCallback(async () => {
     if (!project?.id) return;
+    setLoading(true);
     try {
-      const { error } = await supabase.from('projects').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', project.id);
-      if (error) { Alert.alert('Error', error.message); return; }
-      Alert.alert('Accepted!', 'You can now set your timeline.');
-      navigation.goBack();
-    } catch { Alert.alert('Error', 'Something went wrong.'); }
-  }
+      const { data } = await supabase
+        .from('submissions')
+        .select('*')
+        .eq('project_id', project.id)
+        .order('created_at', { ascending: true });
+      if (data) setSubmissions(data as Submission[]);
+    } catch (err) { console.log('[CreatorWO] fetch err:', err); }
+    finally { setLoading(false); }
+  }, [project?.id]);
 
-  async function handleSubmitTimeline() {
-    if (!project?.id) return;
-    setIsSubmitting(true);
-    try {
-      const updates: any = { updated_at: new Date().toISOString() };
-      if (milestone1) updates.milestone_1_date = milestone1;
-      if (milestone2) updates.milestone_2_date = milestone2;
-      if (finalDate) updates.final_date = finalDate;
-      if (finalOffer) updates.final_offer = parseFloat(finalOffer);
-      if (status === 'accepted') updates.status = 'in_progress';
-      const { error } = await supabase.from('projects').update(updates).eq('id', project.id);
-      if (error) { Alert.alert('Error', error.message); return; }
-      Alert.alert('✅ Timeline Saved', 'Your milestones have been recorded.');
-      navigation.goBack();
-    } catch { Alert.alert('Error', 'Something went wrong.'); }
-    finally { setIsSubmitting(false); }
-  }
+  useEffect(() => { fetchSubmissions(); }, [fetchSubmissions]);
 
-  // ---- Upload Design Logic ----
-  async function pickUploadImage() {
-    if (uploadFiles.length >= 3) {
-      Alert.alert('Limit', 'You can upload up to 3 design files per submission.');
-      return;
-    }
+  const round1 = submissions.find(s => s.round === 'review_1');
+  const round2 = submissions.find(s => s.round === 'review_2');
+  const roundFinal = submissions.find(s => s.round === 'final');
+
+  // Determine which round the consultant should upload next
+  const nextUploadRound: 'review_1' | 'review_2' | 'final' | null = (() => {
+    if (!round1) return 'review_1';
+    if (round1.client_action === 'revert' && !round2) return 'review_2';
+    if (round2?.client_action === 'revert' && !roundFinal) return 'final';
+    return null;
+  })();
+
+  // ── Upload logic ──────────────────────────────────────────
+  async function pickImage() {
+    if (uploadFiles.length >= 3) { Alert.alert('Limit', 'Max 3 files per round.'); return; }
     const { status: perm } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (perm !== 'granted') { Alert.alert('Permission needed', 'Allow photo library access.'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.85 });
+    if (perm !== 'granted') { Alert.alert('Permission needed'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
     if (!result.canceled && result.assets[0]) {
       setUploadFiles(prev => [...prev, result.assets[0].uri]);
     }
   }
 
-  function removeUploadFile(index: number) {
-    setUploadFiles(prev => prev.filter((_, i) => i !== index));
-  }
-
   async function uploadToCloud(localUri: string): Promise<string> {
     const cloudName = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
-    if (!cloudName) return localUri; // fallback for dev
-
+    if (!cloudName) return localUri;
     try {
       const formData = new FormData();
       const filename = localUri.split('/').pop() || 'design.jpg';
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : 'image/jpeg';
-
       formData.append('file', { uri: localUri, name: filename, type } as any);
       formData.append('upload_preset', 'dcreators_unsigned');
       formData.append('folder', 'dcreators/submissions');
-
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-        method: 'POST',
-        body: formData,
-      });
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.secure_url) return data.secure_url;
-      return localUri;
-    } catch {
-      return localUri;
-    }
+      return data.secure_url || localUri;
+    } catch { return localUri; }
   }
 
   async function handleSubmitDesign() {
-    if (!project?.id) return;
-    if (uploadFiles.length === 0) { Alert.alert('No files', 'Please add at least one design image.'); return; }
-
+    if (!project?.id || !uploadRound) return;
+    if (uploadFiles.length === 0) { Alert.alert('No files', 'Add at least one design image.'); return; }
     setIsUploading(true);
     try {
-      // Upload all files to Cloudinary first
-      const uploadedUrls = await Promise.all(uploadFiles.map(uri => uploadToCloud(uri)));
-
-      // Insert submission record with remote URLs
+      const urls = await Promise.all(uploadFiles.map(uri => uploadToCloud(uri)));
       const { error } = await supabase.from('submissions').insert({
         project_id: project.id,
-        round: selectedRound,
-        files: uploadedUrls,
+        round: uploadRound,
+        files: urls,
         consultant_note: uploadNote || null,
       });
-
       if (error) { Alert.alert('Error', error.message); setIsUploading(false); return; }
-
-      // Update project status to match the round
       const statusMap: Record<string, string> = { review_1: 'review_1', review_2: 'review_2', final: 'final_review' };
       await supabase.from('projects').update({
-        status: statusMap[selectedRound],
-        progress_percent: selectedRound === 'review_1' ? 33 : selectedRound === 'review_2' ? 66 : 90,
+        status: statusMap[uploadRound],
+        progress_percent: uploadRound === 'review_1' ? 33 : uploadRound === 'review_2' ? 66 : 90,
         updated_at: new Date().toISOString(),
       }).eq('id', project.id);
-
-      Alert.alert('✅ Design Submitted!', `Your ${selectedRound.replace('_', ' ')} submission has been sent to the client for review.`);
-
-      // Notify client
       if (project.client_id) {
         sendNotification({
           userId: project.client_id,
           title: 'Design Ready for Review',
-          message: `Your consultant has submitted ${selectedRound === 'final' ? 'the final' : 'a'} design for review.`,
+          message: `Your consultant has submitted ${uploadRound === 'final' ? 'the final' : 'a'} design for review.`,
           type: 'review',
         });
       }
-
-      setShowUploadModal(false);
-      setUploadFiles([]);
-      setUploadNote('');
-      navigation.goBack();
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Something went wrong.');
-    } finally { setIsUploading(false); }
+      Alert.alert('✅ Submitted!', 'Design sent to client for review.');
+      setUploadRound(null); setUploadFiles([]); setUploadNote('');
+      fetchSubmissions();
+    } catch (err: any) { Alert.alert('Error', err.message || 'Something went wrong.'); }
+    finally { setIsUploading(false); }
   }
 
-  const ROUND_OPTIONS = [
-    { key: 'review_1' as const, label: 'Review 1 (First Draft)' },
-    { key: 'review_2' as const, label: 'Review 2 (Revised)' },
-    { key: 'final' as const, label: 'Final Submission' },
-  ];
+  // ── Accept project ────────────────────────────────────────
+  async function handleAccept() {
+    if (!project?.id) return;
+    try {
+      const { error } = await supabase.from('projects').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', project.id);
+      if (error) { Alert.alert('Error', error.message); return; }
+      Alert.alert('Accepted!', 'Project accepted. Client will pay advance.');
+      navigation.goBack();
+    } catch { Alert.alert('Error', 'Something went wrong.'); }
+  }
 
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.backgroundImage} imageStyle={{ opacity: 1 }}>
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <TopHeader />
-        
-        <ScrollView style={styles.mainScroll} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-          <View style={styles.container}>
-            
-            <View style={styles.orderHeader}>
-              <Text style={styles.orderNumber}>Assignment No : {assignmentNo}</Text>
-              {!isAccepted && (
-                <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept}>
-                  <Text style={styles.acceptBtnText}>Accept</Text>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <TopHeader />
+      {loading ? (
+        <View style={styles.loadingWrap}><ActivityIndicator size="large" color={colors.orange} /></View>
+      ) : (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.headerSection}>
+            <Text style={styles.projectTitle}>Project Assignment - {projectCode}</Text>
+            <Text style={styles.projectSubtitle}>Incoming Request from "{project?.client_name || 'Client'}"</Text>
+          </View>
+
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryBadgeText}>{assignmentType.toUpperCase()}</Text>
+          </View>
+
+          {/* Project brief */}
+          {project?.assignment_brief && (
+            <View style={styles.briefCard}>
+              <Text style={styles.briefTitle}>
+                {project.assignment_details?.[0] || assignmentType}
+              </Text>
+              <Text style={styles.briefText}>{project.assignment_brief}</Text>
+            </View>
+          )}
+
+          {/* Accept button for pending */}
+          {status === 'pending' && (
+            <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept}>
+              <Text style={styles.acceptBtnText}>Accept Assignment</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Timeline: show feedback + upload slots per round */}
+          <View style={styles.timelineContainer}>
+            {/* Round 1 feedback + upload for round 2 */}
+            {round1?.client_action === 'revert' && (
+              <FeedbackRoundCard
+                round="review_1"
+                submission={round1}
+              />
+            )}
+
+            {/* Round 2 slot */}
+            {nextUploadRound === 'review_2' && (
+              <UploadSlotCard
+                round="review_2"
+                onUpload={() => setUploadRound('review_2')}
+              />
+            )}
+            {round2 && (
+              <SubmittedCard submission={round2} round="review_2" navigation={navigation} />
+            )}
+
+            {/* Round 2 feedback + upload for final */}
+            {round2?.client_action === 'revert' && (
+              <FeedbackRoundCard round="review_2" submission={round2} />
+            )}
+
+            {nextUploadRound === 'final' && (
+              <UploadSlotCard round="final" onUpload={() => setUploadRound('final')} />
+            )}
+            {roundFinal && (
+              <SubmittedCard submission={roundFinal} round="final" navigation={navigation} />
+            )}
+
+            {/* Final feedback */}
+            {roundFinal?.client_action && (
+              <FeedbackRoundCard round="final" submission={roundFinal} />
+            )}
+
+            {/* First upload slot if nothing submitted */}
+            {nextUploadRound === 'review_1' && status !== 'pending' && (
+              <UploadSlotCard round="review_1" onUpload={() => setUploadRound('review_1')} isFirst />
+            )}
+            {round1 && !round1.client_action && (
+              <SubmittedCard submission={round1} round="review_1" navigation={navigation} />
+            )}
+
+            {/* Release final design */}
+            {roundFinal?.client_action === 'approve' && (
+              <View style={styles.releaseSection}>
+                <Text style={styles.releaseNote}>Received the Final Payment</Text>
+                <TouchableOpacity style={styles.releaseBtn}>
+                  <Download size={16} color={colors.textOnPrimary} />
+                  <Text style={styles.releaseBtnText}>Release The Final Design</Text>
                 </TouchableOpacity>
-              )}
-              {isAccepted && (
-                <View style={[styles.acceptBtn, { backgroundColor: colors.success }]}>
-                  <Text style={styles.acceptBtnText}>{status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.titleBox}>
-              <Text style={styles.titleText}>Workorder Generated</Text>
-            </View>
-
-            <View style={styles.detailsCard}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Assignment Type : </Text>
-                <Text style={styles.detailValue}>{project?.assignment_type ? project.assignment_type.charAt(0).toUpperCase() + project.assignment_type.slice(1) : 'N/A'}</Text>
               </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Assignment Details: </Text>
-                <Text style={styles.detailValue}>{project?.assignment_details?.join(', ') || 'N/A'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Assignment Deadline: </Text>
-                <Text style={styles.detailValue}>{project?.deadline || 'Not set'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Assignment Brief: </Text>
-                <Text style={styles.detailValue}>{project?.assignment_brief || 'N/A'}</Text>
-              </View>
-
-              <View style={styles.timelineBox}>
-                <Text style={styles.timelineTitle}>Set Your Timeline</Text>
-                <View style={styles.timelineRow}>
-                  <Text style={styles.timelineBullet}>{'> '}First review - </Text>
-                  <TextInput style={styles.timelineInput} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textTertiary} value={milestone1} onChangeText={setMilestone1} />
-                </View>
-                <View style={styles.timelineRow}>
-                  <Text style={styles.timelineBullet}>{'> '}Second review - </Text>
-                  <TextInput style={styles.timelineInput} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textTertiary} value={milestone2} onChangeText={setMilestone2} />
-                </View>
-                <View style={styles.timelineRow}>
-                  <Text style={styles.timelineBullet}>{'> '}Final review - </Text>
-                  <TextInput style={styles.timelineInput} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textTertiary} value={finalDate} onChangeText={setFinalDate} />
-                </View>
-              </View>
-
-              <View style={[styles.detailRow, { marginTop: spacing.lg }]}>
-                <Text style={styles.detailLabelDark}>Final Assignment Cost: </Text>
-                <TextInput style={[styles.detailValueDark, { borderBottomWidth: 1, borderBottomColor: colors.textPrimary, minWidth: 80, paddingVertical: 2 }]} value={finalOffer} onChangeText={setFinalOffer} placeholder={`${budget}`} placeholderTextColor={colors.textTertiary} keyboardType="number-pad" />
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabelDark}>Budget: </Text>
-                <Text style={styles.detailValueDark}>₹{budget.toLocaleString()}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabelDark}>Advance (50%): </Text>
-                <Text style={styles.detailValueDark}>₹{advance.toLocaleString()}</Text>
-              </View>
-            </View>
-
-            {/* Status Section */}
-            <View style={styles.statusSection}>
-              <Text style={styles.statusLabel}>Assignment Status</Text>
-              <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${project?.progress_percent || 0}%` }]} />
-              </View>
-              <View style={styles.actionButtonsRow}>
-                <TouchableOpacity style={[styles.uploadBtn, { backgroundColor: colors.primary }]} onPress={() => setShowUploadModal(true)}>
-                  <Upload size={14} color={colors.textOnPrimary} />
-                  <Text style={styles.uploadBtnText}>Upload Design</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.queryBtn} onPress={() => navigation.navigate('Chat', { project, otherName: 'Client' })}>
-                  <MessageCircle size={14} color={colors.textOnPrimary} />
-                  <Text style={styles.queryBtnText}>Chat</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
+            )}
           </View>
         </ScrollView>
+      )}
 
-        {isAccepted && (
-          <View style={styles.submitBar}>
-            <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitTimeline} disabled={isSubmitting}>
-              {isSubmitting ? <ActivityIndicator color={colors.textOnPrimary} size="small" /> : <Text style={styles.submitBtnText}>Save Timeline & Offer</Text>}
-            </TouchableOpacity>
-          </View>
-        )}
+      {/* Bottom nav */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity style={styles.bottomBackBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.bottomBackText}>← Back</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomChatBtn} onPress={() => navigation.navigate('Chat', { project, otherName: 'Client' })}>
+          <MessageCircle size={16} color={colors.textOnPrimary} />
+          <Text style={styles.bottomChatText}>Chat</Text>
+        </TouchableOpacity>
+      </View>
 
-        {/* Upload Design Modal */}
-        <Modal visible={showUploadModal} animationType="slide" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Submit Design</Text>
-                <TouchableOpacity onPress={() => setShowUploadModal(false)}><X size={22} color={colors.textSecondary} /></TouchableOpacity>
-              </View>
-
-              {/* Round picker */}
-              <Text style={styles.modalLabel}>Submission Round</Text>
-              <View style={styles.roundRow}>
-                {ROUND_OPTIONS.map(opt => (
-                  <TouchableOpacity key={opt.key} style={[styles.roundChip, selectedRound === opt.key && styles.roundChipActive]} onPress={() => setSelectedRound(opt.key)}>
-                    <Text style={[styles.roundChipText, selectedRound === opt.key && styles.roundChipTextActive]}>{opt.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* File picker */}
-              <Text style={styles.modalLabel}>Design Files ({uploadFiles.length}/3)</Text>
-              <View style={styles.fileGrid}>
-                {uploadFiles.map((uri, i) => (
-                  <View key={i} style={styles.fileThumbWrap}>
-                    <Image source={{ uri }} style={styles.fileThumb} />
-                    <TouchableOpacity style={styles.fileRemove} onPress={() => removeUploadFile(i)}><X size={10} color={colors.textOnPrimary} /></TouchableOpacity>
-                  </View>
-                ))}
-                {uploadFiles.length < 3 && (
-                  <TouchableOpacity style={styles.addFileBtn} onPress={pickUploadImage}>
-                    <ImagePlus size={22} color={colors.textTertiary} />
-                    <Text style={styles.addFileText}>Add</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Note */}
-              <Text style={styles.modalLabel}>Note to Client</Text>
-              <TextInput style={styles.noteInput} value={uploadNote} onChangeText={setUploadNote} placeholder="Describe your design choices..." placeholderTextColor={colors.textTertiary} multiline />
-
-              {/* Submit */}
-              <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleSubmitDesign} disabled={isUploading}>
-                {isUploading ? <ActivityIndicator color={colors.textOnPrimary} size="small" /> : <Text style={styles.modalSubmitText}>Submit for Review</Text>}
+      {/* Upload Modal */}
+      <Modal visible={!!uploadRound} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {uploadRound ? ROUND_META[uploadRound]?.uploadLabel : 'Upload'}
+              </Text>
+              <TouchableOpacity onPress={() => { setUploadRound(null); setUploadFiles([]); setUploadNote(''); }}>
+                <X size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
+
+            <View style={styles.uploadHint}>
+              <Info size={14} color={colors.teal} />
+              <Text style={styles.uploadHintText}>
+                Upload the design as per{'\n'}
+                {uploadRound === 'review_2' ? '1st client review' : uploadRound === 'final' ? '2nd client review' : 'the assignment brief'}
+              </Text>
+            </View>
+
+            <Text style={styles.modalLabel}>Design Files ({uploadFiles.length}/3)</Text>
+            <View style={styles.fileGrid}>
+              {uploadFiles.map((uri, i) => (
+                <View key={i} style={styles.fileThumbWrap}>
+                  <Image source={{ uri }} style={styles.fileThumb} />
+                  <TouchableOpacity style={styles.fileRemove} onPress={() => setUploadFiles(prev => prev.filter((_, j) => j !== i))}>
+                    <X size={10} color={colors.textOnPrimary} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {uploadFiles.length < 3 && (
+                <TouchableOpacity style={styles.addFileBtn} onPress={pickImage}>
+                  <ImagePlus size={22} color={colors.textTertiary} />
+                  <Text style={styles.addFileText}>Add</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <Text style={styles.modalLabel}>Note to Client</Text>
+            <TextInput
+              style={styles.noteInput}
+              value={uploadNote}
+              onChangeText={setUploadNote}
+              placeholder="Describe your design choices..."
+              placeholderTextColor={colors.textTertiary}
+              multiline
+            />
+
+            <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleSubmitDesign} disabled={isUploading}>
+              {isUploading ? <ActivityIndicator color={colors.textOnPrimary} size="small" /> : (
+                <Text style={styles.modalSubmitText}>
+                  {uploadRound ? ROUND_META[uploadRound]?.submitLabel : 'Submit'}
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
-        </Modal>
-      </SafeAreaView>
-    </ImageBackground>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
+
+// ═══ Sub-components ═══════════════════════════════════════════
+
+function FeedbackRoundCard({ round, submission }: { round: string; submission: Submission }) {
+  const meta = ROUND_META[round];
+  const date = new Date(submission.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  return (
+    <View style={styles.feedbackCard}>
+      <View style={styles.feedbackHeader}>
+        <FileText size={14} color={colors.orange} />
+        <Text style={styles.feedbackHeaderText}>{meta.label} - {date}</Text>
+      </View>
+      {submission.feedback_text && (
+        <Text style={styles.feedbackBodyText}>{submission.feedback_text}</Text>
+      )}
+    </View>
+  );
+}
+
+function UploadSlotCard({ round, onUpload, isFirst }: { round: string; onUpload: () => void; isFirst?: boolean }) {
+  const meta = ROUND_META[round];
+  return (
+    <View style={styles.uploadSlotCard}>
+      <View style={styles.uploadSlotIcon}>
+        <ImageIcon size={28} color={colors.textTertiary} />
+      </View>
+      <Text style={styles.uploadSlotTitle}>{meta.uploadLabel}</Text>
+      <Text style={styles.uploadSlotHint}>Drag & drop or click to browse</Text>
+      <TouchableOpacity style={styles.uploadSlotBtn} onPress={onUpload}>
+        <Upload size={14} color={colors.textOnPrimary} />
+        <Text style={styles.uploadSlotBtnText}>{isFirst ? 'Upload First Design' : meta.submitLabel}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function SubmittedCard({ submission, round, navigation }: { submission: Submission; round: string; navigation: any }) {
+  const status = submission.client_action;
+  return (
+    <View style={styles.submittedCard}>
+      <View style={styles.submittedBadge}>
+        <Text style={styles.submittedBadgeText}>
+          {status === 'approve' ? '✅ Approved' : status === 'revert' ? '🔄 Revisions Requested' : '⏳ Awaiting Review'}
+        </Text>
+      </View>
+      {submission.files?.[0] && (
+        <TouchableOpacity onPress={() => navigation.navigate('PortfolioGallery', { images: submission.files, initialIndex: 0 })}>
+          <Image source={{ uri: submission.files[0] }} style={styles.submittedThumb} resizeMode="cover" />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+
+// ═══ Styles ═══════════════════════════════════════════════════
 const styles = StyleSheet.create({
-  backgroundImage: { flex: 1, backgroundColor: colors.screenBg },
-  safeArea: { flex: 1 },
-  mainScroll: { flex: 1 },
-  container: { flex: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
-  
-  orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  orderNumber: {
-    fontSize: fontSizes.xs + 1,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: fonts.medium,
-    flex: 1,
-  },
-  acceptBtn: {
-    backgroundColor: colors.btnDisabled,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.sm,
-  },
-  acceptBtnText: {
-    color: colors.textOnPrimary,
-    fontSize: fontSizes.xs,
-    fontWeight: '700',
-    fontFamily: fonts.heavy,
-  },
+  safe: { flex: 1, backgroundColor: colors.screenBg },
+  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { paddingBottom: 100 },
 
-  titleBox: {
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    alignSelf: 'flex-start',
-    borderRadius: radii.sm,
-    marginBottom: spacing.lg,
-  },
-  titleText: {
-    color: colors.textOnPrimary,
-    fontSize: fontSizes.sm + 1,
-    fontWeight: '700',
-    fontFamily: fonts.heavy,
-  },
+  headerSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md },
+  projectTitle: { fontSize: fontSizes['2xl'], fontWeight: '700', fontFamily: fonts.heavy, color: colors.orange, marginBottom: spacing.xs },
+  projectSubtitle: { fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textSecondary },
 
-  detailsCard: {
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderWidth: 1,
-    borderColor: '#E6E6E6',
-    borderRadius: radii.md,
-    padding: spacing.lg,
-    ...shadows.card,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.sm,
-    flexWrap: 'wrap',
-  },
-  detailLabel: {
-    fontSize: fontSizes.xs + 1,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    fontFamily: fonts.medium,
-  },
-  detailValue: {
-    fontSize: fontSizes.xs + 1,
-    color: colors.textSecondary,
-    fontFamily: fonts.body,
-    flexShrink: 1,
-  },
-  detailLabelDark: {
-    fontSize: fontSizes.xs + 1,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: fonts.heavy,
-  },
-  detailValueDark: {
-    fontSize: fontSizes.xs + 1,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: fonts.heavy,
-  },
+  categoryBadge: { alignSelf: 'flex-start', marginLeft: spacing.xl, marginBottom: spacing.lg, backgroundColor: '#E0F5F1', paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radii.xl, borderWidth: 1, borderColor: colors.teal },
+  categoryBadgeText: { fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy, color: colors.teal, letterSpacing: 0.5 },
 
-  timelineBox: {
-    marginTop: spacing.md,
-    paddingLeft: 10,
-    gap: spacing.sm,
-  },
-  timelineTitle: {
-    fontSize: fontSizes.sm,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: fonts.heavy,
-    marginBottom: spacing.xs,
-  },
-  timelineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  timelineBullet: {
-    fontSize: fontSizes.xs + 1,
-    color: colors.primary,
-    fontWeight: '700',
-    width: 110,
-    fontFamily: fonts.heavy,
-  },
-  timelineInput: {
-    borderWidth: 1,
-    borderColor: colors.borderInput,
-    backgroundColor: colors.cardBg,
-    height: 28,
-    flex: 1,
-    paddingHorizontal: spacing.sm,
-    fontSize: fontSizes.xs + 1,
-    color: colors.textPrimary,
-    fontFamily: fonts.medium,
-  },
+  briefCard: { marginHorizontal: spacing.xl, backgroundColor: colors.cardBg, borderRadius: radii.lg, padding: spacing.lg, marginBottom: spacing.lg, borderWidth: 1, borderColor: colors.border, ...shadows.card },
+  briefTitle: { fontSize: fontSizes.xl, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textPrimary, marginBottom: spacing.sm },
+  briefText: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 20 },
 
-  statusSection: {
-    marginTop: spacing.xl,
-  },
-  statusLabel: {
-    fontSize: fontSizes.xs + 1,
-    fontWeight: '700',
-    color: colors.success,
-    marginBottom: spacing.sm,
-    fontFamily: fonts.heavy,
-  },
-  progressBarBg: {
-    height: 8,
-    backgroundColor: colors.borderInput,
-    borderRadius: radii.sm,
-    marginBottom: spacing.lg,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: colors.success,
-  },
-  
-  actionButtonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.lg,
-  },
-  uploadBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  uploadBtnText: {
-    color: colors.textOnPrimary,
-    fontSize: fontSizes.xs + 1,
-    fontWeight: '700',
-    fontFamily: fonts.heavy,
-  },
-  queryBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    backgroundColor: colors.teal,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  queryBtnText: {
-    color: colors.textOnPrimary,
-    fontSize: fontSizes.xs + 1,
-    fontWeight: '700',
-    fontFamily: fonts.heavy,
-  },
+  acceptBtn: { marginHorizontal: spacing.xl, backgroundColor: colors.success, paddingVertical: 16, borderRadius: radii.lg, alignItems: 'center', marginBottom: spacing.xl },
+  acceptBtnText: { color: colors.textOnPrimary, fontSize: fontSizes.lg, fontWeight: '700', fontFamily: fonts.heavy },
 
-  // Submit bar
-  submitBar: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: 14,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 14,
-    backgroundColor: colors.cardBg,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderCard,
-  },
-  submitBtn: {
-    backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: radii.md,
-    alignItems: 'center',
-  },
-  submitBtnText: {
-    color: colors.textOnPrimary,
-    fontSize: fontSizes.md,
-    fontWeight: '700',
-    fontFamily: fonts.heavy,
-  },
+  timelineContainer: { paddingHorizontal: spacing.xl },
 
-  // Upload Modal
-  modalOverlay: {
-    flex: 1, backgroundColor: colors.overlay,
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
-    backgroundColor: colors.cardBg, borderTopLeftRadius: radii['2xl'], borderTopRightRadius: radii['2xl'],
-    padding: spacing['2xl'], paddingBottom: Platform.OS === 'ios' ? spacing['4xl'] : spacing['2xl'],
-    maxHeight: '85%',
-  },
-  modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  modalTitle: {
-    fontSize: fontSizes.xl, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textPrimary,
-  },
-  modalLabel: {
-    fontSize: fontSizes.sm, fontWeight: '600', fontFamily: fonts.medium, color: colors.textSecondary,
-    marginTop: 14, marginBottom: spacing.sm,
-  },
-  roundRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  roundChip: {
-    paddingHorizontal: 14, paddingVertical: spacing.sm, borderRadius: radii['2xl'],
-    borderWidth: 1.5, borderColor: colors.borderInput, backgroundColor: colors.sectionBg,
-  },
-  roundChipActive: { borderColor: colors.primary, backgroundColor: '#EEF2FF' },
-  roundChipText: { fontSize: fontSizes.sm, fontFamily: fonts.medium, color: colors.textSecondary },
-  roundChipTextActive: { color: colors.primary, fontWeight: '700' },
+  // Feedback card
+  feedbackCard: { marginBottom: spacing.lg, paddingLeft: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.orange },
+  feedbackHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  feedbackHeaderText: { fontSize: fontSizes.sm, fontWeight: '700', fontFamily: fonts.heavy, color: colors.orange },
+  feedbackBodyText: { fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textPrimary, fontStyle: 'italic', lineHeight: 22 },
+
+  // Upload slot
+  uploadSlotCard: { backgroundColor: '#F0F4F8', borderRadius: radii.lg, padding: spacing.xl, alignItems: 'center', marginBottom: spacing.lg, borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed' },
+  uploadSlotIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
+  uploadSlotTitle: { fontSize: fontSizes.base, fontWeight: '600', fontFamily: fonts.medium, color: colors.textPrimary, marginBottom: 2 },
+  uploadSlotHint: { fontSize: fontSizes.sm, fontFamily: fonts.body, color: colors.textTertiary, marginBottom: spacing.lg },
+  uploadSlotBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.teal, paddingVertical: 12, paddingHorizontal: spacing.xl, borderRadius: radii.lg },
+  uploadSlotBtnText: { color: colors.textOnPrimary, fontSize: fontSizes.sm + 1, fontWeight: '700', fontFamily: fonts.heavy },
+
+  // Submitted card
+  submittedCard: { marginBottom: spacing.lg },
+  submittedBadge: { backgroundColor: '#E0F5F1', alignSelf: 'flex-start', paddingVertical: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.md, marginBottom: spacing.sm },
+  submittedBadgeText: { fontSize: fontSizes.xs + 1, fontFamily: fonts.medium, color: colors.teal },
+  submittedThumb: { width: '100%', height: 120, borderRadius: radii.md },
+
+  // Release section
+  releaseSection: { paddingTop: spacing.md },
+  releaseNote: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textTertiary, textAlign: 'center', marginBottom: spacing.md },
+  releaseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.teal, paddingVertical: 16, borderRadius: radii.lg },
+  releaseBtnText: { color: colors.textOnPrimary, fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
+
+  // Bottom bar
+  bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, paddingBottom: Platform.OS === 'ios' ? 30 : spacing.md, backgroundColor: colors.cardBg, borderTopWidth: 1, borderTopColor: colors.borderCard },
+  bottomBackBtn: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  bottomBackText: { fontSize: fontSizes.base, fontFamily: fonts.medium, color: colors.textPrimary },
+  bottomChatBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.primary, paddingVertical: spacing.md, paddingHorizontal: spacing.xl, borderRadius: radii.lg },
+  bottomChatText: { color: colors.textOnPrimary, fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: colors.cardBg, borderTopLeftRadius: radii['2xl'], borderTopRightRadius: radii['2xl'], padding: spacing['2xl'], paddingBottom: Platform.OS === 'ios' ? spacing['4xl'] : spacing['2xl'], maxHeight: '85%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xl },
+  modalTitle: { fontSize: fontSizes.xl, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textPrimary },
+  modalLabel: { fontSize: fontSizes.sm, fontWeight: '600', fontFamily: fonts.medium, color: colors.textSecondary, marginTop: 14, marginBottom: spacing.sm },
+  uploadHint: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, backgroundColor: '#E0F5F1', borderRadius: radii.md, padding: spacing.md, marginBottom: spacing.md },
+  uploadHintText: { fontSize: fontSizes.xs + 1, fontFamily: fonts.medium, color: colors.teal, flex: 1, lineHeight: 16 },
   fileGrid: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   fileThumbWrap: { width: 80, height: 80, borderRadius: radii.md, overflow: 'hidden', position: 'relative' },
   fileThumb: { width: '100%', height: '100%' },
-  fileRemove: {
-    position: 'absolute', top: 4, right: 4,
-    backgroundColor: 'rgba(239,68,68,0.85)', borderRadius: radii.md,
-    width: 20, height: 20, alignItems: 'center', justifyContent: 'center',
-  },
-  addFileBtn: {
-    width: 80, height: 80, borderRadius: radii.md, borderWidth: 2, borderStyle: 'dashed',
-    borderColor: colors.borderInput, alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
-  },
+  fileRemove: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(239,68,68,0.85)', borderRadius: radii.md, width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  addFileBtn: { width: 80, height: 80, borderRadius: radii.md, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.borderInput, alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
   addFileText: { fontSize: fontSizes.xs, fontFamily: fonts.medium, color: colors.textTertiary },
-  noteInput: {
-    backgroundColor: colors.sectionBg, borderWidth: 1, borderColor: colors.border,
-    borderRadius: radii.md, padding: spacing.md, fontSize: fontSizes.sm + 1, fontFamily: fonts.body,
-    color: colors.textPrimary, height: 70, textAlignVertical: 'top',
-  },
-  modalSubmitBtn: {
-    backgroundColor: colors.success, paddingVertical: 14, borderRadius: radii.md,
-    alignItems: 'center', marginTop: spacing.xl,
-  },
-  modalSubmitText: {
-    color: colors.textOnPrimary, fontSize: fontSizes.md, fontWeight: '700', fontFamily: fonts.heavy,
-  },
+  noteInput: { backgroundColor: colors.sectionBg, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, padding: spacing.md, fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textPrimary, height: 70, textAlignVertical: 'top' },
+  modalSubmitBtn: { backgroundColor: colors.teal, paddingVertical: 14, borderRadius: radii.md, alignItems: 'center', marginTop: spacing.xl },
+  modalSubmitText: { color: colors.textOnPrimary, fontSize: fontSizes.md, fontWeight: '700', fontFamily: fonts.heavy },
 });

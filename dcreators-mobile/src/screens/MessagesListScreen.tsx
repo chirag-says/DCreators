@@ -5,12 +5,14 @@ import { ChevronLeft, Search, MessageSquare, User } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const LOCAL_IMAGES: Record<string, any> = {
-  'dcreators/photographer': require('../../assets/photographer.png'),
-  'dcreators/designer': require('../../assets/designer.png'),
-  'dcreators/sculptor': require('../../assets/sculptor.png'),
-  'dcreators/artisan': require('../../assets/artisan.png'),
+  'dcreators/photographer': { uri: RemoteAssets.photographer },
+  'dcreators/designer': { uri: RemoteAssets.designer },
+  'dcreators/sculptor': { uri: RemoteAssets.sculptor },
+  'dcreators/artisan': { uri: RemoteAssets.artisan },
 };
 
 export default function MessagesListScreen({ navigation }: any) {
@@ -35,7 +37,7 @@ export default function MessagesListScreen({ navigation }: any) {
       // Fetch projects the user is involved in (either as client or consultant)
       let query = supabase
         .from('projects')
-        .select('id, assignment_type, status, client_id, consultant_id, consultant_profiles(display_name, code, category)')
+        .select('id, assignment_type, status, client_id, consultant_id, consultant_profiles(display_name, code, category, avatar_url)')
         .in('status', ['accepted', 'advance_paid', 'in_progress', 'review_1', 'review_2', 'final_review', 'approved', 'completed']);
 
       if (currentRole === 'consultant' && consultantProfile?.id) {
@@ -81,10 +83,12 @@ export default function MessagesListScreen({ navigation }: any) {
             name: otherName,
             code: otherCode,
             category,
+            avatarUrl: consultant?.avatar_url || null,
             lastMessage: latestMsg?.text || 'No messages yet',
             time: latestMsg ? formatTime(latestMsg.created_at) : '',
             unread: 0, // Real unread tracking would need a read_at field
             projectId: proj.id,
+            project: proj,
           };
         })
       );
@@ -117,9 +121,14 @@ export default function MessagesListScreen({ navigation }: any) {
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
       style={styles.chatRow} 
-      onPress={() => navigation.navigate('Chat', { projectId: item.projectId })}
+      onPress={() => navigation.navigate('Chat', { project: { id: item.projectId, assignment_type: item.project?.assignment_type }, otherName: item.name })}
     >
-      {LOCAL_IMAGES[`dcreators/${item.category}`] ? (
+      {item.avatarUrl && item.avatarUrl.startsWith('http') ? (
+        <Image
+          source={{ uri: item.avatarUrl }}
+          style={styles.avatar}
+        />
+      ) : LOCAL_IMAGES[`dcreators/${item.category}`] ? (
         <Image
           source={LOCAL_IMAGES[`dcreators/${item.category}`]}
           style={styles.avatar}
@@ -156,7 +165,7 @@ export default function MessagesListScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.cardBg }]} edges={['top']}>
       <ImageBackground 
-        source={require('../../assets/bg-texture.png')} 
+        source={{ uri: RemoteAssets.bgTexture }} 
         style={styles.backgroundImage}
         imageStyle={{ opacity: 1 }}
       >

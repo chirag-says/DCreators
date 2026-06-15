@@ -5,20 +5,22 @@ import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import TopHeader from '../components/TopHeader';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const { width } = Dimensions.get('window');
 
 const AVATAR_IMAGES: Record<string, any> = {
-  photographer: require('../../assets/photographer.png'),
-  designer: require('../../assets/designer.png'),
-  sculptor: require('../../assets/sculptor.png'),
-  artisan: require('../../assets/artisan.png'),
-  photo_archive_1: require('../../assets/photo_archive_1.png'),
-  photo_archive_2: require('../../assets/photo_archive_2.png'),
-  photo_archive_3: require('../../assets/photo_archive_3.png'),
-  design_hub_1: require('../../assets/design_hub_1.png'),
-  design_hub_2: require('../../assets/design_hub_2.png'),
-  design_hub_3: require('../../assets/design_hub_3.png'),
+  photographer: { uri: RemoteAssets.photographer },
+  designer: { uri: RemoteAssets.designer },
+  sculptor: { uri: RemoteAssets.sculptor },
+  artisan: { uri: RemoteAssets.artisan },
+  photo_archive_1: { uri: RemoteAssets.photoArchive1 },
+  photo_archive_2: { uri: RemoteAssets.photoArchive2 },
+  photo_archive_3: { uri: RemoteAssets.photoArchive3 },
+  design_hub_1: { uri: RemoteAssets.designHub1 },
+  design_hub_2: { uri: RemoteAssets.designHub2 },
+  design_hub_3: { uri: RemoteAssets.designHub3 },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -55,7 +57,7 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
     }
   }
 
-  const hasRealAvatar = creator?.avatar_url && (creator.avatar_url.startsWith('file://') || creator.avatar_url.startsWith('http'));
+  const hasRealAvatar = creator?.avatar_url && creator.avatar_url.startsWith('http');
   const avatarSource = hasRealAvatar
     ? { uri: creator.avatar_url }
     : (AVATAR_IMAGES[avatarKey] || AVATAR_IMAGES.photographer);
@@ -66,7 +68,7 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
     : portfolioKeys.map((key: string) => AVATAR_IMAGES[key] || AVATAR_IMAGES.photographer);
 
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} imageStyle={{ opacity: 1 }}>
+    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <TopHeader />
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces={false}>

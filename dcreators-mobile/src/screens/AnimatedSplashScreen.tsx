@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet, ImageBackground } from 'react-native';
+import { RemoteAssets } from '../lib/assets';
+
 
 export default function AnimatedSplashScreen({ navigation }: any) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -28,13 +30,13 @@ export default function AnimatedSplashScreen({ navigation }: any) {
 
   return (
     <ImageBackground
-      source={require('../../assets/bg-texture.png')}
+      source={{ uri: RemoteAssets.bgTexture }}
       style={styles.container}
       imageStyle={{ opacity: 1 }}
       resizeMode="cover"
     >
       <Animated.Image
-        source={require('../../assets/dcreators-logo.png')}
+        source={{ uri: RemoteAssets.dcreatorsLogo }}
         style={[
           styles.logo,
           {

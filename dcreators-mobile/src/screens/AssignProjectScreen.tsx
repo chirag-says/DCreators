@@ -1,33 +1,92 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, TextInput, Platform, Alert, ActivityIndicator } from 'react-native';
+/**
+ * AssignProjectScreen — "Hire & Assign Project"
+ * Matches Figma: "Hire a Consultant.png" / "Hire a Consultant-1.png"
+ *
+ * Layout:
+ * - D icon + tagline header
+ * - "Hire & Assign Project" heading (navy) + description
+ * - White card form:
+ *   - HIRE ROLE dropdown
+ *   - SELECT CREATIVE ITEMS dropdown
+ *   - ASSIGNMENT DATE input
+ *   - ASSIGNMENT BUDGET ($) input
+ *   - ASSIGNMENT BRIEF multiline
+ * - Negotiation Details card (orange gradient)
+ *   - Final Project Cost
+ *   - Suggested Assignment Deadline
+ *   - "Hire with Confidence" tagline
+ * - Terms checkbox
+ * - "Pay 60% Advance" CTA (navy, full-width)
+ * - Reset link
+ * - SELECTED CONSULTANT card at bottom
+ */
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  ImageBackground,
+  TouchableOpacity,
+  TextInput,
+  Platform,
+  Alert,
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import TopHeader from '../components/TopHeader';
+import { ChevronDown, Calendar, Star, CheckSquare } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
-import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
 
-const ASSIGNMENT_TYPES = ['Design', 'Photography', 'Sculpture', 'Handicraft', 'Branding', 'Art Direction'];
+// ─── Figma color tokens ──────────────────────────────────────
+const NAVY = '#1B3A5C';
+const ORANGE = '#E87B35';
+const ORANGE_LIGHT = '#FFF5ED';
+
+const HIRE_ROLES = ['Hire Creative Consultant', 'Hire Photographer', 'Hire Designer', 'Hire Sculptor', 'Hire Artisan'];
+const CREATIVE_ITEMS = ['Logo Design', 'Brand Identity', 'Photography', 'Illustration', 'Packaging', 'Social Media Kit', 'Web Design', 'Art Direction'];
 
 export default function AssignProjectScreen({ navigation, route }: any) {
   const creator = route?.params?.creator;
   const profile = useAuthStore((s) => s.profile);
 
-  const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [agreedTerms, setAgreedTerms] = useState(false);
 
   // Form state
-  const [assignmentType, setAssignmentType] = useState(creator?.category ? creator.category.charAt(0).toUpperCase() + creator.category.slice(1) : 'Design');
-  const [assignmentDetails, setAssignmentDetails] = useState('');
+  const [hireRole, setHireRole] = useState(HIRE_ROLES[0]);
+  const [creativeItem, setCreativeItem] = useState(CREATIVE_ITEMS[0]);
   const [assignmentDate, setAssignmentDate] = useState('');
-  const [assignmentBrief, setAssignmentBrief] = useState('');
   const [budget, setBudget] = useState(creator?.base_price ? String(creator.base_price) : '');
-  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [assignmentBrief, setAssignmentBrief] = useState('');
 
-  const canSubmit = assignmentType && assignmentBrief.trim().length > 0 && budget.trim().length > 0;
+  // Dropdown visibility
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [showItemDropdown, setShowItemDropdown] = useState(false);
+
+  const budgetNum = parseFloat(budget) || 0;
+  const advanceAmount = Math.round(budgetNum * 0.6);
+
+  // Compute deadline suggestion (15 days from assignment date)
+  const suggestedDeadline = useMemo(() => {
+    if (!assignmentDate.trim()) return null;
+    try {
+      const d = new Date(assignmentDate);
+      if (isNaN(d.getTime())) return null;
+      d.setDate(d.getDate() + 15);
+      return `${d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} (15 Days)`;
+    } catch { return null; }
+  }, [assignmentDate]);
+
+  const canSubmit = assignmentBrief.trim().length > 0 && budgetNum > 0 && agreedTerms;
 
   async function handleSubmit() {
     if (!canSubmit) {
-      Alert.alert('Missing Info', 'Please fill Assignment Brief and Budget at minimum.');
+      Alert.alert('Missing Info', 'Please fill all required fields and agree to Terms.');
       return;
     }
     if (!profile?.id) {
@@ -37,21 +96,18 @@ export default function AssignProjectScreen({ navigation, route }: any) {
 
     setIsSubmitting(true);
     try {
-      const projectData: any = {
+      const projectData: Record<string, unknown> = {
         client_id: profile.id,
-        assignment_type: assignmentType.toLowerCase(),
-        assignment_details: assignmentDetails ? assignmentDetails.split(',').map((s: string) => s.trim()) : [],
+        assignment_type: hireRole,
+        assignment_details: [creativeItem],
         assignment_brief: assignmentBrief.trim(),
-        budget: parseFloat(budget),
+        budget: budgetNum,
         status: 'pending',
       };
 
-      // If a specific consultant was pre-selected
       if (creator?.id) {
         projectData.consultant_id = creator.id;
       }
-
-      // Parse deadline if provided
       if (assignmentDate.trim()) {
         projectData.deadline = assignmentDate.trim();
       }
@@ -60,18 +116,14 @@ export default function AssignProjectScreen({ navigation, route }: any) {
 
       if (error) {
         if (error.code === '23503') {
-          Alert.alert('Error', 'The selected consultant profile was not found. Please try again.');
+          Alert.alert('Error', 'The selected consultant profile was not found.');
         } else {
           Alert.alert('Error', error.message);
         }
         return;
       }
 
-      // Navigate to PaymentScreen with the created project
-      navigation.navigate('Payment', {
-        project: data,
-        paymentType: 'advance',
-      });
+      navigation.navigate('Payment', { project: data, paymentType: 'advance' });
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Something went wrong.');
     } finally {
@@ -80,348 +132,539 @@ export default function AssignProjectScreen({ navigation, route }: any) {
   }
 
   function handleReset() {
-    setAssignmentType('Design');
-    setAssignmentDetails('');
+    setHireRole(HIRE_ROLES[0]);
+    setCreativeItem(CREATIVE_ITEMS[0]);
     setAssignmentDate('');
-    setAssignmentBrief('');
     setBudget('');
+    setAssignmentBrief('');
+    setAgreedTerms(false);
   }
 
   return (
-    <ImageBackground 
-      source={require('../../assets/bg-texture.png')} 
-      style={styles.backgroundImage}
+    <ImageBackground
+      source={{ uri: RemoteAssets.bgTexture }}
+      style={styles.bg}
       imageStyle={{ opacity: 1 }}
     >
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <TopHeader />
-        
-        <ScrollView style={styles.mainScroll} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
-          <View style={styles.container}>
-
-            {/* Assigned to banner */}
-            {creator?.name && (
-              <View style={styles.assignedBanner}>
-                <Text style={styles.assignedText}>Assigning to: <Text style={{ fontWeight: '700' }}>{creator.name} ({creator.code})</Text></Text>
-              </View>
-            )}
-            
-            {/* Tabs */}
-            <View style={styles.tabContainer}>
-              <TouchableOpacity 
-                style={[styles.tab, step === 1 ? styles.activeTab : styles.inactiveTab]}
-                onPress={() => setStep(1)}
-              >
-                <Text style={step === 1 ? styles.activeTabText : styles.inactiveTabText}>
-                  Step 1 Assignment Detail
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.tab, step === 2 ? styles.activeTab : styles.inactiveTab]}
-                onPress={() => setStep(2)}
-              >
-                <Text style={step === 2 ? styles.activeTabText : styles.inactiveTabText}>
-                  Step 2 Payment Detail
-                </Text>
-              </TouchableOpacity>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* ── Header ──────────────────────────── */}
+            <View style={styles.headerRow}>
+              <Image
+                source={{ uri: RemoteAssets.dIcon }}
+                style={styles.dIcon}
+                resizeMode="contain"
+              />
+              <Text style={styles.headerTagline}>HIRE CREATIVES. BUY ART. BUILD IDEAS</Text>
             </View>
 
-            {/* Step 1: Assignment Form */}
-            {step === 1 && (
-              <View style={styles.formContainer}>
-                
-                {/* Assignment Type (dropdown) */}
-                <View>
-                  <TouchableOpacity
-                    style={[styles.inputContainer, { borderColor: '#00AEEF' }]}
-                    onPress={() => setShowTypeDropdown(!showTypeDropdown)}
-                  >
-                    <Text style={[styles.inputLabel, { color: '#00AEEF' }]}>Assignment Type</Text>
-                    <View style={[styles.verticalSeparator, { backgroundColor: '#00AEEF' }]} />
-                    <Text style={styles.inputValue}>{assignmentType}</Text>
-                    <View style={[styles.triangleDown, { borderTopColor: '#00AEEF' }]} />
-                  </TouchableOpacity>
-                  {showTypeDropdown && (
-                    <View style={styles.dropdown}>
-                      {ASSIGNMENT_TYPES.map((t) => (
-                        <TouchableOpacity key={t} style={styles.dropdownItem} onPress={() => { setAssignmentType(t); setShowTypeDropdown(false); }}>
-                          <Text style={[styles.dropdownText, assignmentType === t && { color: colors.primary, fontWeight: '700' }]}>{t}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </View>
+            {/* ── Title ───────────────────────────── */}
+            <Text style={styles.title}>Hire & Assign Project</Text>
+            <Text style={styles.subtitle}>
+              Create a professional assignment brief and secure the perfect talent for your creative vision.
+            </Text>
 
-                <View style={[styles.inputContainer, { borderColor: '#F26522' }]}>
-                  <Text style={[styles.inputLabel, { color: '#F26522' }]}>* Assignment Details</Text>
-                  <View style={[styles.verticalSeparator, { backgroundColor: '#F26522' }]} />
-                  <TextInput 
-                    style={styles.textInput}
-                    placeholder="e.g. Brand Manual, Print Ads"
-                    placeholderTextColor={colors.textTertiary}
-                    value={assignmentDetails}
-                    onChangeText={setAssignmentDetails}
-                  />
-                </View>
+            {/* ── Form Card ──────────────────────── */}
+            <View style={styles.formCard}>
 
-                <View style={[styles.inputContainer, { borderColor: colors.success }]}>
-                  <Text style={[styles.inputLabel, { color: colors.success }]}>Assignment Date</Text>
-                  <View style={[styles.verticalSeparator, { backgroundColor: colors.success }]} />
-                  <TextInput 
-                    style={styles.textInput}
-                    placeholder="YYYY-MM-DD"
+              {/* HIRE ROLE */}
+              <View>
+                <Text style={styles.fieldLabel}>HIRE ROLE</Text>
+                <TouchableOpacity
+                  style={styles.dropdown}
+                  onPress={() => { setShowRoleDropdown(!showRoleDropdown); setShowItemDropdown(false); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.dropdownValue}>{hireRole}</Text>
+                  <ChevronDown size={18} color={colors.textTertiary} />
+                </TouchableOpacity>
+                {showRoleDropdown && (
+                  <View style={styles.dropdownList}>
+                    {HIRE_ROLES.map((r) => (
+                      <TouchableOpacity
+                        key={r}
+                        style={styles.dropdownItem}
+                        onPress={() => { setHireRole(r); setShowRoleDropdown(false); }}
+                      >
+                        <Text style={[styles.dropdownItemText, hireRole === r && { color: NAVY, fontWeight: '700' }]}>{r}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* SELECT CREATIVE ITEMS */}
+              <View>
+                <Text style={styles.fieldLabel}>SELECT CREATIVE ITEMS</Text>
+                <TouchableOpacity
+                  style={styles.dropdown}
+                  onPress={() => { setShowItemDropdown(!showItemDropdown); setShowRoleDropdown(false); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.dropdownValue}>{creativeItem}</Text>
+                  <ChevronDown size={18} color={colors.textTertiary} />
+                </TouchableOpacity>
+                {showItemDropdown && (
+                  <View style={styles.dropdownList}>
+                    {CREATIVE_ITEMS.map((item) => (
+                      <TouchableOpacity
+                        key={item}
+                        style={styles.dropdownItem}
+                        onPress={() => { setCreativeItem(item); setShowItemDropdown(false); }}
+                      >
+                        <Text style={[styles.dropdownItemText, creativeItem === item && { color: NAVY, fontWeight: '700' }]}>{item}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* ASSIGNMENT DATE */}
+              <View>
+                <Text style={styles.fieldLabel}>ASSIGNMENT DATE</Text>
+                <View style={styles.inputWithIcon}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    placeholder="mm/dd/yyyy"
                     placeholderTextColor={colors.textTertiary}
                     value={assignmentDate}
                     onChangeText={setAssignmentDate}
                   />
+                  <Calendar size={18} color={colors.textTertiary} />
                 </View>
+              </View>
 
-                <View style={[styles.inputContainer, { borderColor: '#EC008C', height: 70 }]}>
-                  <Text style={[styles.inputLabel, { color: '#EC008C' }]}>* Assignment Brief</Text>
-                  <View style={[styles.verticalSeparator, { backgroundColor: '#EC008C' }]} />
-                  <TextInput 
-                    style={[styles.textInput, { textAlignVertical: 'top', paddingTop: 8 }]}
-                    placeholder="Describe your project..."
-                    placeholderTextColor={colors.textTertiary}
-                    value={assignmentBrief}
-                    onChangeText={setAssignmentBrief}
-                    multiline
-                  />
+              {/* ASSIGNMENT BUDGET */}
+              <View>
+                <Text style={styles.fieldLabel}>ASSIGNMENT BUDGET ($)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="5,000.00"
+                  placeholderTextColor={colors.textTertiary}
+                  value={budget}
+                  onChangeText={setBudget}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              {/* ASSIGNMENT BRIEF */}
+              <View>
+                <Text style={styles.fieldLabel}>ASSIGNMENT BRIEF</Text>
+                <TextInput
+                  style={[styles.input, styles.briefInput]}
+                  placeholder={'"We are looking for a comprehensive visual identity that balances trust and innovation..."'}
+                  placeholderTextColor={colors.textTertiary}
+                  value={assignmentBrief}
+                  onChangeText={setAssignmentBrief}
+                  multiline
+                  numberOfLines={6}
+                  textAlignVertical="top"
+                />
+              </View>
+            </View>
+
+            {/* ── Negotiation Details Card ────────── */}
+            {budgetNum > 0 && (
+              <View style={styles.negotiationCard}>
+                <View style={styles.negotiationBadge}>
+                  <Text style={styles.negotiationBadgeText}>Negotiation Details</Text>
                 </View>
-
-                <View style={[styles.inputContainer, { borderColor: colors.textPrimary }]}>
-                  <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>* Budget (₹)</Text>
-                  <View style={[styles.verticalSeparator, { backgroundColor: colors.textPrimary }]} />
-                  <TextInput 
-                    style={styles.textInput}
-                    placeholder="e.g. 15000"
-                    placeholderTextColor={colors.textTertiary}
-                    value={budget}
-                    onChangeText={setBudget}
-                    keyboardType="number-pad"
-                  />
-                </View>
-
+                <Text style={styles.negotiationCost}>
+                  Final Project Cost:- {budgetNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </Text>
+                <Text style={styles.negotiationDeadline}>
+                  Suggested Assignment Deadline:-{'\n'}
+                  {suggestedDeadline || 'Set date above'}
+                </Text>
+                <Text style={styles.negotiationConfidence}>Hire with Confidence</Text>
               </View>
             )}
 
-            {/* Step 2: Payment (mock) */}
-            {step === 2 && (
-              <View style={styles.formContainer}>
-                <View style={styles.paymentCard}>
-                  <Text style={styles.paymentTitle}>Payment Summary</Text>
-                  <View style={styles.paymentRow}>
-                    <Text style={styles.paymentLabel}>Project Budget</Text>
-                    <Text style={styles.paymentValue}>₹{budget || '0'}</Text>
+            {/* ── Terms checkbox ──────────────────── */}
+            <TouchableOpacity
+              style={styles.termsRow}
+              onPress={() => setAgreedTerms(!agreedTerms)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, agreedTerms && styles.checkboxChecked]}>
+                {agreedTerms && <CheckSquare size={14} color="#fff" strokeWidth={2.5} />}
+              </View>
+              <Text style={styles.termsText}>
+                I agree to the <Text style={styles.termsLink}>Terms and Condition</Text> for creative assignments.
+              </Text>
+            </TouchableOpacity>
+
+            {/* ── Pay 60% Advance CTA ─────────────── */}
+            <TouchableOpacity
+              style={[styles.payBtn, (!canSubmit || isSubmitting) && { opacity: 0.5 }]}
+              onPress={handleSubmit}
+              disabled={!canSubmit || isSubmitting}
+              activeOpacity={0.85}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.payBtnText}>Pay 60% Advance</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* ── Reset ───────────────────────────── */}
+            <TouchableOpacity onPress={handleReset} style={styles.resetBtn} activeOpacity={0.7}>
+              <Text style={styles.resetText}>Reset</Text>
+            </TouchableOpacity>
+
+            {/* ── Selected Consultant Card ─────────── */}
+            {creator && (
+              <View style={styles.consultantSection}>
+                <Text style={styles.selectedLabel}>SELECTED CONSULTANT</Text>
+                <View style={styles.consultantCard}>
+                  <View style={styles.consultantAvatar}>
+                    {creator.avatar_url ? (
+                      <Image source={{ uri: creator.avatar_url }} style={styles.avatarImage} />
+                    ) : (
+                      <View style={styles.avatarPlaceholder}>
+                        <Text style={styles.avatarInitial}>
+                          {(creator.name || 'C').charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                  <View style={styles.paymentRow}>
-                    <Text style={styles.paymentLabel}>Advance (50%)</Text>
-                    <Text style={styles.paymentValue}>₹{budget ? Math.round(parseFloat(budget) * 0.5) : '0'}</Text>
+                  <View style={styles.consultantInfo}>
+                    <Text style={styles.consultantName}>{creator.name || 'Consultant'}</Text>
+                    <Text style={styles.consultantMeta}>
+                      Creative Consultant • {creator.verified ? 'Verified Pro' : 'Pro'}
+                    </Text>
                   </View>
-                  <View style={styles.paymentRow}>
-                    <Text style={styles.paymentLabel}>Balance (after approval)</Text>
-                    <Text style={styles.paymentValue}>₹{budget ? Math.round(parseFloat(budget) * 0.5) : '0'}</Text>
+                </View>
+                <View style={styles.ratingRow}>
+                  <Text style={styles.ratingLabel}>Rating</Text>
+                  <View style={styles.ratingValue}>
+                    <Star size={14} color={ORANGE} fill={ORANGE} />
+                    <Text style={styles.ratingNumber}> {creator.rating || '4.9'}/5.0</Text>
                   </View>
-                  <View style={[styles.paymentRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }]}>
-                    <Text style={[styles.paymentLabel, { fontWeight: '700', color: colors.textPrimary }]}>Pay Now</Text>
-                    <Text style={[styles.paymentValue, { fontWeight: '700', color: colors.primary }]}>₹{budget ? Math.round(parseFloat(budget) * 0.5) : '0'}</Text>
-                  </View>
-                  <Text style={styles.paymentNote}>Tap Submit to create the project and proceed to payment.</Text>
                 </View>
               </View>
             )}
-
-          </View>
-        </ScrollView>
-
-        {/* Actions Bar */}
-        <View style={styles.actionsBar}>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('Terms')}>
-            <Text style={styles.actionBtnText}>Terms & Conditions</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.btnDisabled }]} onPress={handleReset}>
-            <Text style={styles.actionBtnText}>Reset</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: canSubmit ? colors.success : colors.btnDisabled }]}
-            onPress={handleSubmit}
-            disabled={!canSubmit || isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
-              <Text style={styles.actionBtnText}>Submit</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  backgroundImage: { flex: 1, backgroundColor: colors.screenBg },
-  safeArea: { flex: 1 },
-  mainScroll: { flex: 1 },
-  container: { flex: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
-  
-  assignedBanner: {
-    backgroundColor: 'rgba(16,185,129,0.1)',
-    borderLeftWidth: 3,
-    borderLeftColor: colors.success,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: radii.sm,
+  bg: { flex: 1, backgroundColor: colors.screenBg },
+  safe: { flex: 1 },
+  scroll: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing['3xl'],
+  },
+
+  // ── Header ────────────────────────────────────
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginBottom: spacing.lg,
   },
-  assignedText: {
-    fontSize: fontSizes.sm + 1,
+  dIcon: { width: 36, height: 36 },
+  headerTagline: {
+    fontSize: fontSizes.xs,
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
+    letterSpacing: 1.2,
+  },
+
+  // ── Title ─────────────────────────────────────
+  title: {
+    fontSize: 32,
+    fontWeight: '800',
+    fontFamily: fonts.heavy,
+    color: NAVY,
+    lineHeight: 38,
+    marginBottom: spacing.sm,
+  },
+  subtitle: {
+    fontSize: fontSizes.base,
+    fontFamily: fonts.body,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing['2xl'],
+  },
+
+  // ── Form card ─────────────────────────────────
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: spacing.xl,
+    gap: spacing.xl,
+    marginBottom: spacing['2xl'],
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+      android: { elevation: 3 },
+    }),
+  },
+  fieldLabel: {
+    fontSize: fontSizes.xs + 1,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+    color: colors.textSecondary,
+    letterSpacing: 0.8,
+    marginBottom: spacing.sm,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.borderInput,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 13,
+    fontSize: fontSizes.base,
+    fontFamily: fonts.body,
+    color: colors.textPrimary,
+    backgroundColor: '#fff',
+  },
+  inputWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderInput,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 13,
+    backgroundColor: '#fff',
+  },
+  briefInput: {
+    minHeight: 140,
+    paddingTop: 14,
+  },
+
+  // ── Dropdowns ─────────────────────────────────
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.borderInput,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 13,
+    backgroundColor: '#fff',
+  },
+  dropdownValue: {
+    fontSize: fontSizes.base,
+    fontFamily: fonts.body,
+    color: colors.textPrimary,
+  },
+  dropdownList: {
+    borderWidth: 1,
+    borderColor: colors.borderInput,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: radii.md,
+    borderBottomRightRadius: radii.md,
+    backgroundColor: '#fff',
+    marginTop: -4,
+  },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.borderLight,
+  },
+  dropdownItemText: {
+    fontSize: fontSizes.base,
     fontFamily: fonts.body,
     color: colors.textPrimary,
   },
 
-  tabContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-    marginBottom: spacing['2xl'],
+  // ── Negotiation card ──────────────────────────
+  negotiationCard: {
+    backgroundColor: ORANGE_LIGHT,
+    borderRadius: 16,
+    padding: spacing.xl,
+    marginBottom: spacing.xl,
+    borderLeftWidth: 4,
+    borderLeftColor: ORANGE,
   },
-  tab: {
+  negotiationBadge: {
+    backgroundColor: ORANGE,
+    alignSelf: 'flex-start',
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 6,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.sm,
+    marginBottom: spacing.lg,
   },
-  activeTab: { backgroundColor: colors.primary },
-  inactiveTab: { backgroundColor: colors.btnDisabled },
-  activeTabText: {
-    color: colors.textOnPrimary, fontSize: fontSizes.sm, fontWeight: '700', fontFamily: fonts.heavy,
+  negotiationBadgeText: {
+    color: '#fff',
+    fontSize: fontSizes.sm,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
   },
-  inactiveTabText: {
-    color: colors.textOnPrimary, fontSize: fontSizes.sm, fontWeight: '700', fontFamily: fonts.heavy,
+  negotiationCost: {
+    fontSize: fontSizes.lg,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+    color: NAVY,
+    marginBottom: spacing.md,
+  },
+  negotiationDeadline: {
+    fontSize: fontSizes.base,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+    color: NAVY,
+    lineHeight: 22,
+    marginBottom: spacing.md,
+  },
+  negotiationConfidence: {
+    fontSize: fontSizes.xl,
+    fontFamily: fonts.body,
+    color: colors.textSecondary,
   },
 
-  formContainer: { gap: spacing.lg, paddingHorizontal: 10 },
+  // ── Terms ─────────────────────────────────────
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    marginBottom: spacing['2xl'],
+    paddingHorizontal: spacing.sm,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: colors.borderInput,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  checkboxChecked: {
+    backgroundColor: NAVY,
+    borderColor: NAVY,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: fontSizes.base,
+    fontFamily: fonts.body,
+    color: colors.textPrimary,
+    lineHeight: 22,
+  },
+  termsLink: {
+    color: colors.primary,
+    textDecorationLine: 'underline',
+  },
 
-  inputContainer: {
+  // ── Pay CTA ───────────────────────────────────
+  payBtn: {
+    backgroundColor: NAVY,
+    borderRadius: radii.full,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  payBtnText: {
+    color: '#fff',
+    fontSize: fontSizes.lg,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+    letterSpacing: 0.3,
+  },
+
+  // ── Reset ─────────────────────────────────────
+  resetBtn: {
+    alignItems: 'center',
+    marginBottom: spacing['3xl'],
+  },
+  resetText: {
+    fontSize: fontSizes.base,
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
+  },
+
+  // ── Selected Consultant ───────────────────────
+  consultantSection: {
+    marginBottom: spacing.xl,
+  },
+  selectedLabel: {
+    fontSize: fontSizes.xs + 1,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+    color: colors.textSecondary,
+    letterSpacing: 0.8,
+    marginBottom: spacing.md,
+  },
+  consultantCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
-    backgroundColor: colors.cardBg,
-    minHeight: 40,
+    gap: spacing.lg,
+    marginBottom: spacing.md,
   },
-  inputLabel: {
-    width: 130,
-    paddingLeft: spacing.sm,
-    fontSize: fontSizes.sm,
-    fontWeight: '600',
-    fontFamily: fonts.medium,
+  consultantAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
   },
-  inputValue: {
+  avatarImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  avatarPlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E8ECF4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: NAVY,
+  },
+  consultantInfo: {
     flex: 1,
-    paddingHorizontal: 10,
-    fontSize: fontSizes.sm,
-    color: colors.textPrimary,
-    fontFamily: fonts.medium,
   },
-  verticalSeparator: { width: 1.5, height: '100%' },
-  textInput: {
-    flex: 1,
-    height: '100%',
-    paddingHorizontal: 10,
-    fontSize: fontSizes.sm,
-    color: colors.textPrimary,
-    fontFamily: fonts.medium,
-  },
-  triangleDown: {
-    width: 0, height: 0,
-    backgroundColor: 'transparent',
-    borderStyle: 'solid',
-    borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 8,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent',
-    marginRight: 10,
-  },
-
-  // Dropdown
-  dropdown: {
-    backgroundColor: colors.cardBg,
-    borderWidth: 1,
-    borderColor: colors.borderInput,
-    borderTopWidth: 0,
-    marginTop: -1,
-  },
-  dropdownItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderBottomWidth: 0.5,
-    borderBottomColor: colors.borderLight,
-  },
-  dropdownText: {
-    fontSize: fontSizes.sm + 1,
-    fontFamily: fonts.medium,
-    color: colors.textPrimary,
-  },
-
-  // Payment card
-  paymentCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: radii.lg,
-    padding: spacing.xl,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: colors.borderCard,
-    ...shadows.card,
-  },
-  paymentTitle: {
+  consultantName: {
     fontSize: fontSizes.lg,
     fontWeight: '700',
     fontFamily: fonts.heavy,
     color: colors.textPrimary,
-    marginBottom: 4,
   },
-  paymentRow: {
+  consultantMeta: {
+    fontSize: fontSizes.sm,
+    fontFamily: fonts.body,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  ratingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  paymentLabel: {
+  ratingLabel: {
     fontSize: fontSizes.base,
     fontFamily: fonts.body,
     color: colors.textSecondary,
   },
-  paymentValue: {
-    fontSize: fontSizes.base,
-    fontFamily: fonts.medium,
-    color: colors.textPrimary,
-  },
-  paymentNote: {
-    fontSize: fontSizes.xs + 1,
-    fontFamily: fonts.body,
-    color: colors.textTertiary,
-    textAlign: 'center',
-    marginTop: spacing.sm,
-  },
-
-  // Actions bar
-  actionsBar: {
+  ratingValue: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 10,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 10,
-    justifyContent: 'space-between',
-    backgroundColor: '#E6E6E6',
-  },
-  actionBtn: {
-    flex: 1,
-    marginHorizontal: 4,
-    paddingVertical: spacing.sm,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.sm,
   },
-  actionBtnText: {
-    color: colors.textOnPrimary,
-    fontSize: fontSizes.xs,
+  ratingNumber: {
+    fontSize: fontSizes.base,
     fontWeight: '700',
     fontFamily: fonts.heavy,
+    color: ORANGE,
   },
 });

@@ -10,6 +10,8 @@ import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const CATEGORIES = [
   'Photography', 'Videography', 'Design', 'Painting',
@@ -128,6 +130,23 @@ export default function EditConsultantProfileScreen({ navigation }: any) {
     return mapping[uiCategories[0]] || 'designer';
   }
 
+  async function uploadToCloud(localUri: string): Promise<string> {
+    const cloudName = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
+    if (!cloudName || localUri.startsWith('http')) return localUri;
+    try {
+      const formData = new FormData();
+      const filename = localUri.split('/').pop() || 'image.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+      formData.append('file', { uri: localUri, name: filename, type } as any);
+      formData.append('upload_preset', 'dcreators_unsigned');
+      formData.append('folder', 'dcreators/profiles');
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      return data.secure_url || localUri;
+    } catch { return localUri; }
+  }
+
   async function handleUpdate() {
     if (!consultantProfile?.id || !profile?.id) {
       Alert.alert('Error', 'No consultant profile found. Please log out and back in.');
@@ -140,7 +159,13 @@ export default function EditConsultantProfileScreen({ navigation }: any) {
 
     setIsSaving(true);
     try {
+      // Upload avatar if it's a local file
+      const avatarUrl = profileImage ? await uploadToCloud(profileImage) : null;
+
+      // Upload portfolio images — skip already-uploaded URLs
       const portfolioUris = portfolioImages.filter(uri => uri && uri.length > 0);
+      const uploadedPortfolio = await Promise.all(portfolioUris.map(uri => uploadToCloud(uri)));
+
       const parsedPrice = basePrice ? parseFloat(basePrice) : null;
 
       // Build update payload
@@ -151,8 +176,8 @@ export default function EditConsultantProfileScreen({ navigation }: any) {
         experience: selectedExperience,
         expertise: selectedCategories.join(', '),
         bio: bio || null,
-        avatar_url: profileImage || null,
-        portfolio_images: portfolioUris,
+        avatar_url: avatarUrl,
+        portfolio_images: uploadedPortfolio,
         base_price: parsedPrice,
         updated_at: new Date().toISOString(),
       };
@@ -190,7 +215,7 @@ export default function EditConsultantProfileScreen({ navigation }: any) {
   }
 
   return (
-    <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} resizeMode="cover">
+    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} resizeMode="cover">
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <TopHeader />
 

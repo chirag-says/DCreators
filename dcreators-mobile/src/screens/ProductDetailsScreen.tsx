@@ -1,52 +1,121 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, Platform, Dimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, Platform, Dimensions, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Share2, Heart, ShoppingBag, CheckCircle, ShieldCheck } from 'lucide-react-native';
+import { ChevronLeft, Share2, Heart, ShoppingBag, CheckCircle, ShieldCheck, ChevronRight } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { RemoteAssets } from '../lib/assets';
+
 
 const { width } = Dimensions.get('window');
 
-export default function ProductDetailsScreen({ navigation }: any) {
+export default function ProductDetailsScreen({ navigation, route }: any) {
+  const product = route?.params?.product;
   const [isFav, setIsFav] = useState(false);
+  const [activeImage, setActiveImage] = useState(0);
+
+  const title = product?.title || 'Product';
+  const description = product?.description || 'No description available.';
+  const price = product?.price ? Number(product.price) : 0;
+  const category = product?.category || 'General';
+  const images = product?.images?.filter((url: string) => url && url.length > 0) || [];
+  const consultantName = product?.consultant_profiles?.display_name || 'Consultant';
+  const consultantCode = product?.consultant_profiles?.code || '---';
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.cardBg }]} edges={['top']}>
-      <ImageBackground source={require('../../assets/bg-texture.png')} style={styles.bg} imageStyle={{ opacity: 1 }}>
+      <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
+
+        {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.goBack()}><ChevronLeft size={24} color={colors.textPrimary} /></TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.goBack()}>
+            <ChevronLeft size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.iconBtn}><Share2 size={20} color={colors.textPrimary} /></TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => setIsFav(!isFav)}><Heart size={20} color={isFav ? colors.primary : colors.textPrimary} fill={isFav ? colors.primary : 'transparent'} /></TouchableOpacity>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => setIsFav(!isFav)}>
+              <Heart size={20} color={isFav ? colors.primary : colors.textPrimary} fill={isFav ? colors.primary : 'transparent'} />
+            </TouchableOpacity>
           </View>
         </View>
+
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-          <ImageBackground source={require('../../assets/photo_archive_3.png')} style={styles.imagePlaceholder} resizeMode="cover" />
+
+          {/* Product Image */}
+          {images.length > 0 ? (
+            <View style={styles.imagePlaceholder}>
+              <Image source={{ uri: images[activeImage] }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+              {images.length > 1 && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.navArrow, { left: 10 }]}
+                    onPress={() => setActiveImage(p => p > 0 ? p - 1 : images.length - 1)}
+                  >
+                    <ChevronLeft size={24} color="#FFF" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.navArrow, { right: 10 }]}
+                    onPress={() => setActiveImage(p => p < images.length - 1 ? p + 1 : 0)}
+                  >
+                    <ChevronRight size={24} color="#FFF" />
+                  </TouchableOpacity>
+                  <View style={styles.dotsRow}>
+                    {images.map((_: string, i: number) => (
+                      <View key={i} style={[styles.dot, i === activeImage && styles.dotActive]} />
+                    ))}
+                  </View>
+                </>
+              )}
+            </View>
+          ) : (
+            <View style={[styles.imagePlaceholder, { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sectionBg }]}>
+              <ShoppingBag size={48} color={colors.borderInput} />
+              <Text style={{ marginTop: 8, color: colors.textTertiary, fontFamily: fonts.body }}>No images</Text>
+            </View>
+          )}
+
+          {/* Content */}
           <View style={styles.contentContainer}>
             <View style={styles.titleRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.categoryLabel}>UI Kits</Text>
-                <Text style={styles.productTitle}>E-commerce App UI Kit (Figma)</Text>
+                <Text style={styles.categoryLabel}>{category}</Text>
+                <Text style={styles.productTitle}>{title}</Text>
               </View>
-              <Text style={styles.price}>₹2,999</Text>
+              <Text style={styles.price}>₹{price.toLocaleString()}</Text>
             </View>
-            <Text style={styles.creatorInfo}>by <Text style={{ color: colors.primary, fontWeight: 'bold' }}>D207 / Suita Roy</Text>  ·  4.9 ★ (89 Reviews)</Text>
+
+            <Text style={styles.creatorInfo}>
+              by <Text style={{ color: colors.primary, fontWeight: 'bold' }}>{consultantCode} / {consultantName}</Text>
+            </Text>
+
             <View style={styles.badgesRow}>
-              <View style={styles.badge}><CheckCircle size={14} color="#059669" /><Text style={styles.badgeText}>Instant Download</Text></View>
-              <View style={styles.badge}><ShieldCheck size={14} color="#059669" /><Text style={styles.badgeText}>Commercial License</Text></View>
+              <View style={styles.badge}><CheckCircle size={14} color="#059669" /><Text style={styles.badgeText}>Verified Creator</Text></View>
+              <View style={styles.badge}><ShieldCheck size={14} color="#059669" /><Text style={styles.badgeText}>Secure Purchase</Text></View>
             </View>
+
             <View style={styles.divider} />
+
             <Text style={styles.sectionTitle}>Description</Text>
-            <Text style={styles.descriptionText}>A comprehensive UI kit for E-commerce applications. Designed exclusively in Figma, it includes over 60+ beautifully crafted mobile screens spanning across onboarding, catalog, cart, checkout, and user profile flows.{'\n\n'}Features:{'\n'}• 60+ Premium Screens{'\n'}• Fully Customizable Components{'\n'}• Global Styleguide included{'\n'}• Light & Dark mode ready</Text>
+            <Text style={styles.descriptionText}>{description}</Text>
+
             <View style={styles.divider} />
-            <Text style={styles.sectionTitle}>File Details</Text>
-            <View style={styles.fileInfoRow}><Text style={styles.fileInfoLabel}>Format</Text><Text style={styles.fileInfoValue}>.fig (Figma)</Text></View>
-            <View style={styles.fileInfoRow}><Text style={styles.fileInfoLabel}>File Size</Text><Text style={styles.fileInfoValue}>42.8 MB</Text></View>
-            <View style={styles.fileInfoRow}><Text style={styles.fileInfoLabel}>Last Updated</Text><Text style={styles.fileInfoValue}>March 15, 2026</Text></View>
+
+            <Text style={styles.sectionTitle}>Details</Text>
+            <View style={styles.fileInfoRow}><Text style={styles.fileInfoLabel}>Category</Text><Text style={styles.fileInfoValue}>{category}</Text></View>
+            <View style={styles.fileInfoRow}><Text style={styles.fileInfoLabel}>Images</Text><Text style={styles.fileInfoValue}>{images.length} photo(s)</Text></View>
+            <View style={styles.fileInfoRow}><Text style={styles.fileInfoLabel}>Seller</Text><Text style={styles.fileInfoValue}>{consultantName}</Text></View>
           </View>
         </ScrollView>
+
+        {/* Bottom Bar */}
         <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.cartBtn}><ShoppingBag size={20} color={colors.textPrimary} /></TouchableOpacity>
-          <TouchableOpacity style={styles.buyBtn}><Text style={styles.buyBtnText}>Buy Now</Text></TouchableOpacity>
+          <View style={{ flex: 1, justifyContent: 'center' }}>
+            <Text style={{ fontSize: fontSizes.xs + 1, color: colors.textTertiary, fontFamily: fonts.body }}>Price</Text>
+            <Text style={{ fontSize: fontSizes.xl, fontWeight: '800', color: colors.textPrimary, fontFamily: fonts.heavy }}>₹{price.toLocaleString()}</Text>
+          </View>
+          <TouchableOpacity style={styles.buyBtn}>
+            <Text style={styles.buyBtnText}>Buy Now</Text>
+          </TouchableOpacity>
         </View>
+
       </ImageBackground>
     </SafeAreaView>
   );
@@ -55,10 +124,14 @@ export default function ProductDetailsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   bg: { flex: 1, backgroundColor: colors.screenBg },
   safeArea: { flex: 1 },
-  header: { backgroundColor: colors.cardBg, position: 'absolute', top: Platform.OS === 'ios' ? 44 : 20, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.lg, zIndex: 10 },
+  header: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 25, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.lg, zIndex: 10 },
   headerRight: { flexDirection: 'row', gap: spacing.md },
   iconBtn: { width: 40, height: 40, borderRadius: radii['2xl'], backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center', ...shadows.sm },
-  imagePlaceholder: { width, height: width, backgroundColor: colors.borderInput, alignItems: 'center', justifyContent: 'center' },
+  imagePlaceholder: { width, height: width * 0.85, backgroundColor: colors.borderInput, position: 'relative' },
+  navArrow: { position: 'absolute', top: '45%', width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
+  dotsRow: { position: 'absolute', bottom: 14, alignSelf: 'center', flexDirection: 'row', gap: 6 },
+  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.5)' },
+  dotActive: { backgroundColor: '#FFF', width: 18 },
   contentContainer: { padding: spacing.xl, backgroundColor: colors.cardBg, borderTopLeftRadius: radii['2xl'], borderTopRightRadius: radii['2xl'], marginTop: -24, paddingBottom: spacing['4xl'] },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },
   categoryLabel: { fontSize: fontSizes.xs + 1, color: colors.textSecondary, textTransform: 'uppercase', fontWeight: '700', letterSpacing: 1, marginBottom: spacing.xs, fontFamily: fonts.heavy },
@@ -75,7 +148,6 @@ const styles = StyleSheet.create({
   fileInfoLabel: { fontSize: fontSizes.sm + 1, color: colors.textSecondary, fontFamily: fonts.medium },
   fileInfoValue: { fontSize: fontSizes.sm + 1, fontWeight: '600', color: colors.textPrimary, fontFamily: fonts.medium },
   bottomBar: { flexDirection: 'row', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: Platform.OS === 'ios' ? 34 : spacing.lg, backgroundColor: colors.cardBg, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.lg },
-  cartBtn: { width: 56, height: 56, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.borderInput, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sectionBg },
-  buyBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
+  buyBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
   buyBtnText: { color: colors.textOnPrimary, fontSize: fontSizes.lg, fontWeight: '700', fontFamily: fonts.heavy },
 });
