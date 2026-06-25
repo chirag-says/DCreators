@@ -211,7 +211,7 @@ export default function ExploreConsultantsScreen({ navigation }: any) {
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.bottomNavBtn, s.bottomNavBtnActive]}
-            onPress={() => navigation.navigate('ConsultantProjectCollaboration', { project: null })}
+            onPress={() => navigation.navigate('Main', { screen: 'Dashboard' })}
             activeOpacity={0.8}
           >
             <Text style={[s.bottomNavText, s.bottomNavTextActive]}>Project Dashboard</Text>

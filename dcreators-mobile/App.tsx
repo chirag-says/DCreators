@@ -33,7 +33,6 @@ import AssignMultipleScreen from './src/screens/AssignMultipleScreen';
 import TermsScreen from './src/screens/TermsScreen';
 import PortfolioGalleryScreen from './src/screens/PortfolioGalleryScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
-import FinalizeOfferScreen from './src/screens/FinalizeOfferScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import ChatScreen from './src/screens/ChatScreen';
@@ -46,7 +45,6 @@ import ProductDetailsScreen from './src/screens/ProductDetailsScreen';
 import MenuScreen from './src/screens/MenuScreen';
 import MessagesListScreen from './src/screens/MessagesListScreen';
 import EditConsultantProfileScreen from './src/screens/EditConsultantProfileScreen';
-import CollaborationDashboard from './src/screens/CollaborationDashboard';
 import MyProductsScreen from './src/screens/MyProductsScreen';
 import AddEditProductScreen from './src/screens/AddEditProductScreen';
 // Phase 3 — Creative Services Workflow
@@ -66,7 +64,6 @@ import CreatorDashboardScreen from './src/screens/CreatorDashboardScreen';
 import ConsultantEarningsHistoryScreen from './src/screens/ConsultantEarningsHistoryScreen';
 import ConsultantServicePricingScreen from './src/screens/ConsultantServicePricingScreen';
 import ConsultantProjectManagementScreen from './src/screens/ConsultantProjectManagementScreen';
-import ConsultantProjectCollaborationScreen from './src/screens/ConsultantProjectCollaborationScreen';
 
 // Phase 6 — Remaining Figma Screens
 import ExploreConsultantsScreen from './src/screens/ExploreConsultantsScreen';
@@ -130,10 +127,8 @@ export default function App() {
           <Stack.Screen name="EditConsultantProfile" component={EditConsultantProfileScreen} />
           <Stack.Screen name="AssignMultiple" component={AssignMultipleScreen} />
           <Stack.Screen name="Terms" component={TermsScreen} />
-          <Stack.Screen name="FinalizeOffer" component={FinalizeOfferScreen} />
           <Stack.Screen name="ClientWorkorder" component={ClientWorkorderScreen} />
           <Stack.Screen name="ClientReview" component={ClientReviewScreen} />
-          <Stack.Screen name="CollaborationDashboard" component={CollaborationDashboard} />
           <Stack.Screen name="Payment" component={PaymentScreen} />
 
           {/* Phase 3 — Creative Services Workflow (Product A) */}
@@ -153,7 +148,6 @@ export default function App() {
           <Stack.Screen name="ConsultantEarningsHistory" component={ConsultantEarningsHistoryScreen} />
           <Stack.Screen name="ConsultantServicePricing" component={ConsultantServicePricingScreen} />
           <Stack.Screen name="ConsultantProjectManagement" component={ConsultantProjectManagementScreen} />
-          <Stack.Screen name="ConsultantProjectCollaboration" component={ConsultantProjectCollaborationScreen} />
 
           {/* Phase 6 — Remaining Figma Screens */}
           <Stack.Screen name="ExploreConsultants" component={ExploreConsultantsScreen} />

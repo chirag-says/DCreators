@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
 import { supabase } from '../lib/supabase';
+import { updateProjectStatus } from '../services/projectService';
 import {
   FileText, ImageIcon, ChevronRight, Info,
   ArrowLeft, Lock, Download, Star, MessageCircle,
@@ -97,11 +98,8 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
   async function handleApproveWorkOrder() {
     if (!project?.id) return;
     try {
-      const { error } = await supabase.from('projects').update({
-        status: 'in_progress',
-        updated_at: new Date().toISOString(),
-      }).eq('id', project.id);
-      if (error) { Alert.alert('Error', error.message); return; }
+      // work_order_accepted → in_progress validated by status machine
+      await updateProjectStatus(project.id, 'in_progress');
       if (project.consultant_id) {
         const { sendNotification } = await import('../lib/notifications');
         sendNotification({

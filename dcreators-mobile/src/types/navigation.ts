@@ -47,10 +47,8 @@ export type RootStackParamList = {
   EditConsultantProfile: undefined;
   AssignMultiple: { consultantIds?: string[] };
   Terms: undefined;
-  FinalizeOffer: { project: Project };
   ClientWorkorder: { project: Project };
   ClientReview: { project: Project };
-  CollaborationDashboard: { project: Project };
   Payment: { project: Project; paymentType: 'advance' | 'balance' };
 
   // Phase 3 — Creative Services Workflow (Product A)
@@ -58,7 +56,7 @@ export type RootStackParamList = {
   ConsultantMatching: { project: Project };
   // owner_role: CLIENT  previous: CLIENT_ADVANCE_PAYMENT_SCREEN  next: CONSULTANT_WORK_ORDER_SCREEN
   GenerateWorkOrder: { project: Project; txnId: string; payAmount: number };
-  // owner_role: CONSULTANT  previous: notification  next: CollaborationDashboard (in_progress)
+  // owner_role: CONSULTANT  previous: notification  next: CreatorWorkorder (work_order_accepted)
   ConsultantWorkOrder: { project: Project };
   // owner_role: CLIENT  previous: PaymentScreen (balance_paid)  next: Main/Dashboard
   RateConsultant: { project: Project };
@@ -79,7 +77,6 @@ export type RootStackParamList = {
   ConsultantEarningsHistory: undefined;
   ConsultantServicePricing: undefined;
   ConsultantProjectManagement: undefined;
-  ConsultantProjectCollaboration: { project: any };
 
   // Phase 6 — Remaining Figma Screens
   ExploreConsultants: undefined;

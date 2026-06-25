@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
 import { supabase } from '../lib/supabase';
+import { updateProjectStatus } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -147,12 +148,13 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
         consultant_note: uploadNote || null,
       });
       if (error) { Alert.alert('Error', error.message); setIsUploading(false); return; }
+
+      // Map upload round to the status machine's next status
       const statusMap: Record<string, string> = { review_1: 'review_1', review_2: 'review_2', final: 'final_review' };
-      await supabase.from('projects').update({
-        status: statusMap[uploadRound],
-        progress_percent: uploadRound === 'review_1' ? 33 : uploadRound === 'review_2' ? 66 : 90,
-        updated_at: new Date().toISOString(),
-      }).eq('id', project.id);
+      const nextStatus = statusMap[uploadRound] as any;
+      const progress = uploadRound === 'review_1' ? 33 : uploadRound === 'review_2' ? 66 : 90;
+      await updateProjectStatus(project.id, nextStatus, { progress_percent: progress });
+
       if (project.client_id) {
         sendNotification({
           userId: project.client_id,
@@ -175,12 +177,8 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
     if (!project?.id) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('projects').update({
-        final_offer: amount,
-        status: 'advance_pending',
-        updated_at: new Date().toISOString(),
-      }).eq('id', project.id);
-      if (error) { Alert.alert('Error', error.message); return; }
+      // assigned → advance_pending; merge final_offer in the same atomic update
+      await updateProjectStatus(project.id, 'advance_pending', { final_offer: amount });
       if (project.client_id) {
         sendNotification({
           userId: project.client_id,

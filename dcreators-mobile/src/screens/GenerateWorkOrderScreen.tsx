@@ -24,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CheckCircle, Info, ArrowLeft } from 'lucide-react-native';
 import { Image } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { updateProjectStatus } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
@@ -71,13 +72,8 @@ export default function GenerateWorkOrderScreen({ navigation, route }: any) {
         txn_id: txnId,
       };
 
-      const { error } = await supabase.from('projects').update({
-        status: 'work_order_generated',
-        work_order_data: workOrderData,
-        updated_at: new Date().toISOString(),
-      }).eq('id', project.id);
-
-      if (error) { Alert.alert('Error', error.message); return; }
+      // advance_paid → work_order_generated; attach the WO snapshot as extraFields
+      await updateProjectStatus(project.id, 'work_order_generated', { work_order_data: workOrderData });
 
       // Notify consultant to review and accept WO
       if (project.consultant_id) {

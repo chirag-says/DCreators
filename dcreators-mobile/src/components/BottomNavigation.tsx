@@ -24,7 +24,7 @@ export default function BottomNavigation({ state, navigation: tabNavigation }: a
 
   // Hide the ActionBanner on screens where it's contextually redundant
   const HIDE_BANNER_SCREENS = [
-    'AssignProject', 'FinalizeOffer', 'Payment', 'Terms', 'Chat',
+    'AssignProject', 'Payment', 'Terms', 'Chat',
     'ClientReview', 'ClientWorkorder', 'CreatorWorkorder', 'Invoice',
     'AssignMultiple', 'EditProfile', 'EditConsultantProfile',
     'CreatorOnboardingStep1', 'CreatorOnboardingStep2', 'CreatorOnboardingStep3',

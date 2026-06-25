@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
 import { supabase } from '../lib/supabase';
+import { updateProjectStatus } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
 import { ArrowLeft, Check, RotateCcw, MessageSquare } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
@@ -60,22 +61,22 @@ export default function ClientReviewScreen({ navigation, route }: any) {
       { text: 'Approve', onPress: async () => {
         setIsSaving(true);
         try {
-          // Update submission
           await supabase.from('submissions').update({
             client_action: 'approve',
             selected_option: selectedOption || 1,
           }).eq('id', submission.id);
 
-          // Update project status
-          const nextStatus = submission.round === 'final' ? 'approved' : 'in_progress';
-          const nextProgress = submission.round === 'final' ? 100 : (submission.round === 'review_1' ? 40 : 70);
-          await supabase.from('projects').update({
-            status: nextStatus,
-            progress_percent: nextProgress,
-            updated_at: new Date().toISOString(),
-          }).eq('id', project.id);
+          // Determine the correct next status per the machine:
+          //   review_1 → review_2, review_2 → final_review, final → final_approved
+          const nextStatusMap: Record<string, string> = {
+            review_1: 'review_2',
+            review_2: 'final_review',
+            final: 'final_approved',
+          };
+          const nextStatus = nextStatusMap[submission.round] as any;
+          const nextProgress = submission.round === 'review_1' ? 40 : submission.round === 'review_2' ? 70 : 100;
+          await updateProjectStatus(project.id, nextStatus, { progress_percent: nextProgress });
 
-          // Notify consultant
           if (project.consultant_id) {
             sendNotification({
               userId: project.consultant_id,
@@ -98,7 +99,7 @@ export default function ClientReviewScreen({ navigation, route }: any) {
               }
             }}]
           );
-        } catch { Alert.alert('Error', 'Something went wrong.'); }
+        } catch (err: any) { Alert.alert('Error', err.message || 'Something went wrong.'); }
         finally { setIsSaving(false); }
       }},
     ]);
@@ -121,13 +122,9 @@ export default function ClientReviewScreen({ navigation, route }: any) {
         feedback_text: feedbackText || null,
       }).eq('id', submission.id);
 
-      // Move project back to in_progress
-      await supabase.from('projects').update({
-        status: 'in_progress',
-        updated_at: new Date().toISOString(),
-      }).eq('id', project.id);
+      // Any review round → in_progress is the revert path per status machine
+      await updateProjectStatus(project.id, 'in_progress');
 
-      // Notify consultant
       if (project.consultant_id) {
         const areas = [colourChecked && 'Colour', conceptChecked && 'Concept', designChecked && 'Design'].filter(Boolean).join(', ');
         sendNotification({
@@ -141,7 +138,7 @@ export default function ClientReviewScreen({ navigation, route }: any) {
       Alert.alert('Changes Requested', 'Your feedback has been sent to the consultant.',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
-    } catch { Alert.alert('Error', 'Something went wrong.'); }
+    } catch (err: any) { Alert.alert('Error', err.message || 'Something went wrong.'); }
     finally { setIsSaving(false); }
   }
 

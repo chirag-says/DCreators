@@ -184,8 +184,8 @@ const STATUS_TRANSITIONS: Partial<Record<ProjectStatus, ProjectStatus[]>> = {
 export async function updateProjectStatus(
   projectId: string,
   newStatus: ProjectStatus,
+  extraFields?: Record<string, unknown>,
 ): Promise<void> {
-  // Fetch current status first
   const { data: project, error: fetchErr } = await supabase
     .from('projects')
     .select('status')
@@ -207,7 +207,7 @@ export async function updateProjectStatus(
 
   const { error } = await supabase
     .from('projects')
-    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .update({ status: newStatus, updated_at: new Date().toISOString(), ...extraFields })
     .eq('id', projectId);
 
   if (error) {

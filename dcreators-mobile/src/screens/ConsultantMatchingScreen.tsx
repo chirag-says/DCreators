@@ -3,14 +3,14 @@
  *
  * owner_role: CLIENT
  * previous_screen: CLIENT_ASSIGN_PROJECT_SCREEN (bidding path only)
- * next_screen: CONSULTANT_NEGOTIATION_SCREEN (via CollaborationDashboard after Hire Now)
+ * next_screen: CLIENT_DASHBOARD (consultant notified; negotiation happens in CreatorWorkorderScreen)
  * workflow_stage: DRAFT → ASSIGNED
  *
  * Logic:
  *  - Fetches consultant_profiles where category matches the project's assignment_type
  *  - Filters to those with base_price within ±5% of project budget
  *  - Shows "X consultants available within (5% +/- of budget)" banner
- *  - "Hire Now" → assigns consultant_id to project (status: 'assigned') → CollaborationDashboard
+ *  - "Hire Now" → assigns consultant_id to project (status: 'assigned') → client goes back to Dashboard
  *  - "View Portfolio" → CreatorProfile screen
  *
  * Figma: CLIENT_CONSULTANT_MATCHING_SCREEN.png
@@ -30,6 +30,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SlidersHorizontal, Megaphone, ArrowLeft, ExternalLink } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
+import { updateProjectStatus } from '../services/projectService';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
 import type { Project } from '../types';
@@ -125,24 +126,20 @@ export default function ConsultantMatchingScreen({ navigation, route }: any) {
 
   // ── HIRE NOW: assign consultant → status 'assigned' ─────────
   async function handleHireNow(consultant: MatchedConsultant) {
-    if (hiringId) return; // prevent double-tap
+    if (hiringId) return;
     setHiringId(consultant.id);
 
     try {
-      const { data: updatedProject, error } = await supabase
+      // First patch consultant_id (not a status field, extraFields handles it)
+      const { error: patchErr } = await supabase
         .from('projects')
-        .update({
-          consultant_id: consultant.user_id,
-          status: 'assigned',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', project.id)
-        .select()
-        .single();
+        .update({ consultant_id: consultant.user_id })
+        .eq('id', project.id);
+      if (patchErr) throw new Error(patchErr.message);
 
-      if (error) throw new Error(error.message);
+      // Validate draft → assigned through the status machine
+      await updateProjectStatus(project.id, 'assigned');
 
-      // Bidding path: consultant gets notification, client waits. Go to dashboard.
       Alert.alert('Consultant Assigned ✅', `${consultant.display_name} has been notified and will review your project.`, [
         { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Dashboard' }) },
       ]);

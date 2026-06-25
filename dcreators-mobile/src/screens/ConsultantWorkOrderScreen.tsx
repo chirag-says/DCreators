@@ -30,6 +30,7 @@ import {
 } from 'lucide-react-native';
 import { Image } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { updateProjectStatus } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
@@ -111,13 +112,8 @@ export default function ConsultantWorkOrderScreen({ navigation, route }: any) {
     if (!project?.id) { Alert.alert('Error', 'Project not found.'); return; }
     setAccepting(true);
     try {
-      // Flow A step 5: work_order_generated → work_order_accepted (client then approves → in_progress)
-      const { error } = await supabase.from('projects').update({
-        status: 'work_order_accepted',
-        updated_at: new Date().toISOString(),
-      }).eq('id', project.id);
-
-      if (error) { Alert.alert('Error', error.message); return; }
+      // Flow A step 5: work_order_generated → work_order_accepted
+      await updateProjectStatus(project.id, 'work_order_accepted');
 
       if (project.client_id) {
         sendNotification({
