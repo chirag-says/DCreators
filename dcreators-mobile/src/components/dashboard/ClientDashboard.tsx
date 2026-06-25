@@ -1,18 +1,7 @@
 // ============================================
-// ClientDashboard — "Creator's Dashboard"
-// Matches Figma: "Creators Dashboard - Final.png"
-//
-// Layout:
-// - TopHeader (D icon + notification + avatar)
-// - "Creator's Dashboard" heading (teal gradient)
-// - 4 quick-action grid buttons:
-//   Sales Dashboard | Project Dashboard
-//   Sales History   | Manage Projects
-// - Artwork portfolio cards (vertical scroll):
-//   - Image with artwork title overlay
-//   - Title + Price row
-//   - Category + "Artwork Brief..." link
-//   - Size + edit/delete icons
+// ClientDashboard — "Explore Creative Consultant's Portfolio"
+// Role: CLIENT | Figma: "Explore Creative Consultant's Portfolio.png"
+// 5 creator browse sections + active projects summary
 // ============================================
 
 import React, { useCallback } from 'react';
@@ -73,7 +62,7 @@ const SECTIONS = [
     labelColors: ['#F28220', '#A4A767', '#A35165'],
   },
   {
-    title: "Designer's Hub",
+    title: "Designer's Desk",
     category: 'designer',
     headerBg: '#4E3F30',
     headerBorderColor: '#30261A',
@@ -81,6 +70,26 @@ const SECTIONS = [
     scrollBg: '#5C4F40',
     cardStyle: 'hub' as CardStyle,
     labelColors: ['#A7A965', '#EE1F3E', '#009BD9'],
+  },
+  {
+    title: "Artist's Gallery",
+    category: 'sculptor',
+    headerBg: '#2C3E50',
+    headerBorderColor: '#1A2535',
+    headerTextStyle: 'gray' as const,
+    scrollBg: '#34495E',
+    cardStyle: 'archive' as CardStyle,
+    labelColors: ['#7FB3D3', '#E8A87C', '#82E0AA'],
+  },
+  {
+    title: "Artisan's Hub",
+    category: 'artisan',
+    headerBg: '#6B4C2A',
+    headerBorderColor: '#4A3218',
+    headerTextStyle: 'light' as const,
+    scrollBg: '#7D5A35',
+    cardStyle: 'card' as CardStyle,
+    labelColors: ['#F4D03F', '#E59866', '#A9DFBF'],
   },
 ];
 
@@ -117,7 +126,18 @@ export default function ClientDashboard({ navigation }: ClientDashboardProps) {
   }
 
   function goToWorkorder(project: ProjectWithConsultant) {
-    (navigation as any).navigate('ClientWorkorder', { project });
+    const s = project.status;
+    // Spec-driven routing based on current project state
+    if (s === 'advance_pending') {
+      // Client needs to pay advance
+      (navigation as any).navigate('Payment', { project, paymentType: 'advance' });
+    } else if (s === 'advance_paid') {
+      // Client should generate work order
+      (navigation as any).navigate('GenerateWorkOrder', { project, txnId: '', payAmount: project.final_offer ?? project.budget });
+    } else {
+      // in_progress, review_1, review_2, final_review, final_approved, balance_pending, balance_paid, delivered, completed
+      (navigation as any).navigate('ClientWorkorder', { project });
+    }
   }
 
 

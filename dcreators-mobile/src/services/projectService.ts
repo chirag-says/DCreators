@@ -26,22 +26,26 @@ export interface ProjectWithClient extends Project {
   } | null;
 }
 
-/** Active statuses for consultant dashboard */
+/** Active statuses for consultant dashboard (CONSULTANT_PROJECT_MANAGEMENT_SCREEN) */
 const CONSULTANT_ACTIVE_STATUSES: ProjectStatus[] = [
-  'pending', 'accepted', 'advance_paid', 'in_progress',
-  'review_1', 'review_2', 'final_review',
+  'assigned', 'advance_pending', 'advance_paid',
+  'work_order_generated', 'work_order_accepted',
+  'in_progress', 'review_1', 'review_2', 'final_review',
 ];
 
 /** Active statuses for client dashboard */
 const CLIENT_ACTIVE_STATUSES: ProjectStatus[] = [
-  'pending', 'accepted', 'advance_paid', 'in_progress',
-  'review_1', 'review_2', 'final_review', 'approved',
+  'draft', 'assigned', 'advance_pending', 'advance_paid',
+  'work_order_generated', 'work_order_accepted',
+  'in_progress', 'review_1', 'review_2', 'final_review',
+  'final_approved', 'balance_pending',
 ];
 
 /** Completed statuses for history */
 const COMPLETED_STATUSES: ProjectStatus[] = [
-  'balance_paid', 'completed',
+  'balance_paid', 'delivered', 'completed',
 ];
+
 
 // ─── Project Queries ─────────────────────────────────────────
 
@@ -124,20 +128,55 @@ export async function fetchProjectById(projectId: string): Promise<ProjectWithCo
 // ─── Status Machine ──────────────────────────────────────────
 
 /**
- * Valid transitions in the status machine.
- * Key = current status, Value = allowed next statuses.
+ * Canonical status machine — spec-locked.
+ * Every arrow in the spec maps to an entry here.
+ * Key = current status, Value = valid next statuses.
+ * NEVER add a transition not in the spec.
  */
 const STATUS_TRANSITIONS: Partial<Record<ProjectStatus, ProjectStatus[]>> = {
-  pending: ['accepted', 'rejected', 'cancelled'],
-  accepted: ['advance_paid', 'cancelled'],
-  advance_paid: ['in_progress'],
+  // CLIENT_ASSIGN_PROJECT_SCREEN → CLIENT_CONSULTANT_MATCHING_SCREEN
+  draft: ['assigned', 'cancelled'],
+
+  // CLIENT_CONSULTANT_MATCHING_SCREEN: consultant selected
+  assigned: ['advance_pending', 'cancelled'],
+
+  // CLIENT_ADVANCE_PAYMENT_SCREEN: client submits payment
+  advance_pending: ['advance_paid', 'cancelled'],
+
+  // CLIENT_GENERATE_WORK_ORDER_SCREEN: WO created
+  advance_paid: ['work_order_generated'],
+
+  // CONSULTANT_WORK_ORDER_SCREEN: consultant accepts WO
+  work_order_generated: ['work_order_accepted'],
+
+  // CLIENT_WORK_ORDER_APPROVAL_SCREEN: client approves WO → project starts
+  work_order_accepted: ['in_progress'],
+
+  // CONSULTANT_FIRST_REVIEW_UPLOAD_SCREEN: upload draft 1
   in_progress: ['review_1'],
-  review_1: ['review_2', 'in_progress'],  // revert to in_progress if rejected
+
+  // CLIENT_DESIGN_REVIEW_SCREEN round 1
+  review_1: ['review_2', 'in_progress'],   // revert = in_progress
+
+  // CLIENT_DESIGN_REVIEW_SCREEN round 2
   review_2: ['final_review', 'in_progress'],
-  final_review: ['approved', 'in_progress'],
-  approved: ['balance_paid'],
-  balance_paid: ['completed'],
+
+  // CLIENT_DESIGN_REVIEW_SCREEN round 3 (FINAL — max 3 rounds)
+  final_review: ['final_approved', 'in_progress'],
+
+  // CLIENT_BALANCE_PAYMENT_SCREEN: payment initiated
+  final_approved: ['balance_pending'],
+
+  // CLIENT_FINAL_PAYMENT_SUCCESS_SCREEN: download unlocked
+  balance_pending: ['balance_paid'],
+
+  // CLIENT_FINAL_PAYMENT_SUCCESS_SCREEN → download
+  balance_paid: ['delivered'],
+
+  // CLIENT_REVIEW_CONSULTANT_SCREEN: review submitted
+  delivered: ['completed'],
 };
+
 
 /**
  * Update a project's status with validation against the status machine.

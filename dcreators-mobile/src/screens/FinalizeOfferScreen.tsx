@@ -39,7 +39,8 @@ export default function FinalizeOfferScreen({ navigation, route }: any) {
         .from('projects')
         .update({
           final_offer: costNum,
-          status: 'accepted',
+          // Spec: assigned → advance_pending (negotiation complete, client pays advance next)
+          status: 'advance_pending',
           updated_at: new Date().toISOString(),
         })
         .eq('id', project.id);

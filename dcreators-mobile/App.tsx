@@ -49,6 +49,33 @@ import EditConsultantProfileScreen from './src/screens/EditConsultantProfileScre
 import CollaborationDashboard from './src/screens/CollaborationDashboard';
 import MyProductsScreen from './src/screens/MyProductsScreen';
 import AddEditProductScreen from './src/screens/AddEditProductScreen';
+// Phase 3 — Creative Services Workflow
+import ConsultantMatchingScreen from './src/screens/ConsultantMatchingScreen';
+import GenerateWorkOrderScreen from './src/screens/GenerateWorkOrderScreen';
+import ConsultantWorkOrderScreen from './src/screens/ConsultantWorkOrderScreen';
+import RateConsultantScreen from './src/screens/RateConsultantScreen';
+
+// Phase 4 — Product B: Artwork Marketplace
+import ArtistSalesRequestScreen from './src/screens/ArtistSalesRequestScreen';
+import ArtistOrderDispatchScreen from './src/screens/ArtistOrderDispatchScreen';
+import ArtworkOrderTrackingScreen from './src/screens/ArtworkOrderTrackingScreen';
+import ArtworkPaymentScreen from './src/screens/ArtworkPaymentScreen';
+import CreatorDashboardScreen from './src/screens/CreatorDashboardScreen';
+
+// Phase 5 — Consultant Management Screens
+import ConsultantEarningsHistoryScreen from './src/screens/ConsultantEarningsHistoryScreen';
+import ConsultantServicePricingScreen from './src/screens/ConsultantServicePricingScreen';
+import ConsultantProjectManagementScreen from './src/screens/ConsultantProjectManagementScreen';
+import ConsultantProjectCollaborationScreen from './src/screens/ConsultantProjectCollaborationScreen';
+
+// Phase 6 — Remaining Figma Screens
+import ExploreConsultantsScreen from './src/screens/ExploreConsultantsScreen';
+import HireConsultantScreen from './src/screens/HireConsultantScreen';
+import ConsultantPortfolioUpdateScreen from './src/screens/ConsultantPortfolioUpdateScreen';
+import PaymentConfirmedScreen from './src/screens/PaymentConfirmedScreen';
+import ArtistSalesRequestDetailScreen from './src/screens/ArtistSalesRequestDetailScreen';
+
+
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -108,6 +135,32 @@ export default function App() {
           <Stack.Screen name="ClientReview" component={ClientReviewScreen} />
           <Stack.Screen name="CollaborationDashboard" component={CollaborationDashboard} />
           <Stack.Screen name="Payment" component={PaymentScreen} />
+
+          {/* Phase 3 — Creative Services Workflow (Product A) */}
+          <Stack.Screen name="ConsultantMatching" component={ConsultantMatchingScreen} />
+          <Stack.Screen name="GenerateWorkOrder" component={GenerateWorkOrderScreen} />
+          <Stack.Screen name="ConsultantWorkOrder" component={ConsultantWorkOrderScreen} />
+          <Stack.Screen name="RateConsultant" component={RateConsultantScreen} />
+
+          {/* Phase 4 — Product B: Artwork Marketplace */}
+          <Stack.Screen name="ArtistSalesRequest" component={ArtistSalesRequestScreen} />
+          <Stack.Screen name="ArtistOrderDispatch" component={ArtistOrderDispatchScreen} />
+          <Stack.Screen name="ArtworkOrderTracking" component={ArtworkOrderTrackingScreen} />
+          <Stack.Screen name="ArtworkPayment" component={ArtworkPaymentScreen} />
+          <Stack.Screen name="CreatorDashboard" component={CreatorDashboardScreen} />
+
+          {/* Phase 5 — Consultant Management */}
+          <Stack.Screen name="ConsultantEarningsHistory" component={ConsultantEarningsHistoryScreen} />
+          <Stack.Screen name="ConsultantServicePricing" component={ConsultantServicePricingScreen} />
+          <Stack.Screen name="ConsultantProjectManagement" component={ConsultantProjectManagementScreen} />
+          <Stack.Screen name="ConsultantProjectCollaboration" component={ConsultantProjectCollaborationScreen} />
+
+          {/* Phase 6 — Remaining Figma Screens */}
+          <Stack.Screen name="ExploreConsultants" component={ExploreConsultantsScreen} />
+          <Stack.Screen name="HireConsultant" component={HireConsultantScreen} />
+          <Stack.Screen name="ConsultantPortfolioUpdate" component={ConsultantPortfolioUpdateScreen} />
+          <Stack.Screen name="PaymentConfirmed" component={PaymentConfirmedScreen} />
+          <Stack.Screen name="ArtistSalesRequestDetail" component={ArtistSalesRequestDetailScreen} />
 
           {/* Modals and Overlays */}
           <Stack.Screen name="Filter" component={FilterScreen} options={{ presentation: 'modal' }} />

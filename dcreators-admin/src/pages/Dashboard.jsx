@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Users, Briefcase, FolderKanban, CreditCard, TrendingUp, Activity } from 'lucide-react';
+import { Users, Briefcase, FolderKanban, CreditCard, TrendingUp, Activity, ShieldAlert } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({ users: 0, consultants: 0, projects: 0, revenue: 0, pending: 0, active: 0 });
+  const [stats, setStats] = useState({ users: 0, consultants: 0, projects: 0, revenue: 0, pending: 0, active: 0, pendingApprovals: 0 });
   const [recentProjects, setRecentProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -11,11 +11,12 @@ export default function Dashboard() {
 
   async function fetchStats() {
     try {
-      const [usersRes, consultantsRes, projectsRes, paymentsRes] = await Promise.all([
+      const [usersRes, consultantsRes, projectsRes, paymentsRes, pendingApprovalsRes] = await Promise.all([
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.from('consultant_profiles').select('id', { count: 'exact', head: true }),
         supabase.from('projects').select('id, status', { count: 'exact' }),
         supabase.from('payments').select('amount').eq('status', 'completed'),
+        supabase.from('consultant_profiles').select('id', { count: 'exact', head: true }).eq('is_approved', false),
       ]);
 
       const revenue = paymentsRes.data?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
@@ -29,6 +30,7 @@ export default function Dashboard() {
         revenue,
         pending,
         active,
+        pendingApprovals: pendingApprovalsRes.count || 0,
       });
 
       // Fetch recent projects
@@ -45,9 +47,9 @@ export default function Dashboard() {
   const STAT_CARDS = [
     { label: 'Total Users', value: stats.users, icon: Users, color: '#3B82F6', bg: 'rgba(59,130,246,0.15)' },
     { label: 'Consultants', value: stats.consultants, icon: Briefcase, color: '#8B5CF6', bg: 'rgba(139,92,246,0.15)' },
+    { label: 'Pending Approvals', value: stats.pendingApprovals, icon: ShieldAlert, color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
     { label: 'Total Projects', value: stats.projects, icon: FolderKanban, color: '#E03A5F', bg: 'rgba(224,58,95,0.15)' },
     { label: 'Revenue', value: `₹${stats.revenue.toLocaleString()}`, icon: CreditCard, color: '#10B981', bg: 'rgba(16,185,129,0.15)' },
-    { label: 'Pending Projects', value: stats.pending, icon: Activity, color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
     { label: 'Active Projects', value: stats.active, icon: TrendingUp, color: '#06B6D4', bg: 'rgba(6,182,212,0.15)' },
   ];
 

@@ -19,7 +19,7 @@ export interface UseConsultantProjectsReturn {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  handleAction: (projectId: string, action: 'accepted' | 'rejected') => Promise<{ success: boolean; error?: string }>;
+  handleAction: (projectId: string, action: 'accept' | 'reject') => Promise<{ success: boolean; error?: string }>;
 }
 
 export function useConsultantProjects(consultantId: string | undefined): UseConsultantProjectsReturn {
@@ -50,11 +50,14 @@ export function useConsultantProjects(consultantId: string | undefined): UseCons
 
   const handleAction = useCallback(async (
     projectId: string,
-    action: 'accepted' | 'rejected',
+    action: 'accept' | 'reject',
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      await updateProjectStatus(projectId, action as ProjectStatus);
-      await fetch(); // Refresh list
+      // Spec: assigned → advance_pending (consultant accepts)
+      //       assigned → rejected (consultant rejects)
+      const newStatus: ProjectStatus = action === 'accept' ? 'advance_pending' : 'rejected';
+      await updateProjectStatus(projectId, newStatus);
+      await fetch();
       return { success: true };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Action failed';

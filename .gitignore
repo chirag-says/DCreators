@@ -66,3 +66,6 @@ graphify-out/
 
 # Refactor scripts (one-off dev tools)
 refactor-*.js
+
+# Local test media (not code)
+test@gmail.com/

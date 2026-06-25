@@ -152,16 +152,37 @@ export default function PaymentScreen({ navigation, route }: any) {
   async function handlePaymentComplete() {
     setVerifying(true);
     try {
-      // Poll our DB for the webhook update
       const result = await verifyPaymentStatus(currentOrderId);
 
       if (result.status === 'completed') {
         setTxnId(result.cashfreePaymentId || currentOrderId);
+
+        // ── Spec state transition post-payment ────────────────────
+        if (project?.id) {
+          const newStatus = paymentType === 'advance' ? 'advance_paid' : 'balance_paid';
+          await supabase.from('projects').update({
+            status: newStatus,
+            updated_at: new Date().toISOString(),
+          }).eq('id', project.id);
+
+          // Notify consultant
+          if (project.consultant_id) {
+            sendNotification({
+              userId: project.consultant_id,
+              title: paymentType === 'advance' ? 'Advance Payment Received' : 'Balance Payment Received',
+              message: paymentType === 'advance'
+                ? `Client paid the advance of ₹${payAmount.toLocaleString('en-IN')}. Please generate the Work Order.`
+                : `Client paid the balance of ₹${payAmount.toLocaleString('en-IN')}. Project is complete!`,
+              type: 'payment',
+            });
+          }
+        }
+        // ─────────────────────────────────────────────
+
         setIsPaid(true);
       } else if (result.status === 'failed') {
         Alert.alert('Payment Failed', 'Your payment was not successful. Please try again.');
       } else {
-        // Still pending after polling — might take time for webhook
         Alert.alert(
           'Payment Processing',
           'Your payment is being verified. You will receive a notification once confirmed.',
@@ -218,27 +239,44 @@ export default function PaymentScreen({ navigation, route }: any) {
                 </View>
                 <Text style={styles.successNote}>
                   {paymentType === 'advance'
-                    ? 'Advance paid. The consultant will begin work shortly.'
-                    : 'Balance paid. Your project is now complete! 🎉'}
+                    ? 'Advance paid. Generate the Work Order to begin the project.'
+                    : 'Balance paid. Your project is complete! 🎉'}
                 </Text>
-                {paymentType === 'balance' && (
+                {paymentType === 'advance' ? (
                   <TouchableOpacity
-                    style={[styles.doneBtn, { backgroundColor: '#EAB308', marginBottom: 10 }]}
-                    onPress={() => navigation.replace('RatingReview', { project })}
+                    style={styles.doneBtn}
+                    onPress={() => {
+                      // HireConsultant payments → PaymentConfirmed success screen
+                      // Regular project advance → GenerateWorkOrder flow
+                      if (project?.assignment_type) {
+                        navigation.replace('PaymentConfirmed', {
+                          transactionId: txnId || `DC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+                          amountPaid: payAmount,
+                          paidAt: new Date().toISOString(),
+                          projectId: project?.id,
+                        });
+                      } else {
+                        navigation.replace('GenerateWorkOrder', { project, txnId, payAmount });
+                      }
+                    }}
                   >
-                    <Text style={styles.doneBtnText}>⭐ Rate & Review</Text>
+                    <Text style={styles.doneBtnText}>{project?.assignment_type ? 'View Confirmation →' : 'Generate Work Order →'}</Text>
                   </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.doneBtn} onPress={() => navigation.navigate('Main')}>
-                  <Text style={styles.doneBtnText}>Back to Dashboard</Text>
-                </TouchableOpacity>
-                {paymentType === 'balance' && (
-                  <TouchableOpacity
-                    style={[styles.doneBtn, { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.primary, marginTop: 10 }]}
-                    onPress={() => navigation.navigate('Invoice', { project })}
-                  >
-                    <Text style={[styles.doneBtnText, { color: colors.primary }]}>View Invoice</Text>
-                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.doneBtn, { backgroundColor: '#EAB308' }]}
+                      onPress={() => navigation.replace('RateConsultant', { project })}
+                    >
+                      <Text style={styles.doneBtnText}>⭐ Rate & Review</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.doneBtn, { marginTop: 10 }]}
+                      onPress={() => navigation.navigate('Main')}
+                    >
+                      <Text style={styles.doneBtnText}>Back to Dashboard</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
               </Animated.View>
             ) : verifying ? (

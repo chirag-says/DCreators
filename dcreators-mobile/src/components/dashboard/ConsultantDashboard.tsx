@@ -1,21 +1,11 @@
 // ============================================
-// ConsultantDashboard — "Sales Dashboard"
-// Matches Figma: "Sales Dashboard.png" / "Sales Dashboard-1.png"
-//
-// Layout:
-// - TopHeader (D icon + notification + avatar)
-// - "Sales Dashboard" heading (orange gradient)
-// - Description subtitle
-// - Pending assignment cards:
-//   - Project/artwork title + image
-//   - Delivery address
-//   - Payment status info
-//   - Terms checkbox + Accept/Decline buttons
-//   - About the Buyer section
-// - Active projects list
+// ConsultantDashboard — Sales Dashboard sub-screen
+// Role: CONSULTANT | Product: B (Artwork Marketplace)
+// Figma: "Sales Dashboard.png"
+// Reads: artwork_orders (NOT projects table)
 // ============================================
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -31,17 +21,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../TopHeader';
-import ProjectCard from './ProjectCard';
 import { FileText, Truck, CreditCard, CheckSquare, TrendingUp, IndianRupee } from 'lucide-react-native';
 import { useAuthStore } from '../../store/useAuthStore';
-import { useConsultantProjects } from '../../hooks/useProjects';
+import { supabase } from '../../lib/supabase';
 import { fetchConsultantEarnings } from '../../services/projectService';
 import { colors, fonts, fontSizes, spacing, radii } from '../../styles/theme';
 import { RemoteAssets } from '../../lib/assets';
-import type { Project } from '../../types';
+import type { ArtworkOrder } from '../../types';
 import type { MainTabScreenProps } from '../../types/navigation';
 
-// ─── Figma color tokens ──────────────────────────────────────
 const ORANGE_TITLE = '#E87B35';
 const NAVY = '#1B3A5C';
 const ACCEPT_BG = NAVY;
@@ -54,62 +42,102 @@ interface ConsultantDashboardProps {
 export default function ConsultantDashboard({ navigation }: ConsultantDashboardProps) {
   const profile = useAuthStore((s) => s.profile);
   const consultantProfile = useAuthStore((s) => s.consultantProfile);
-  const [agreedTerms, setAgreedTerms] = useState<Set<string>>(new Set());
+
+  const [orders, setOrders] = useState<ArtworkOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [agreedOrders, setAgreedOrders] = useState<Set<string>>(new Set());
   const [earnings, setEarnings] = useState({ total: 0, pending: 0, thisMonth: 0 });
 
-  // consultant_id in projects = auth user_id
-  const consultantUserId = consultantProfile?.user_id ?? profile?.id;
+  const artistId = consultantProfile?.user_id ?? profile?.id;
 
-  const { projects, loading, error, refresh, handleAction } = useConsultantProjects(consultantUserId);
+  // Fetch incoming artwork purchase requests from artwork_orders (Product B)
+  // Never falls back to projects table
+  async function fetchOrders() {
+    if (!artistId) { setLoading(false); return; }
+    try {
+      const { data, error } = await supabase
+        .from('artwork_orders')
+        .select(
+          '*, shop_products(title,description,price,images,category), buyer_profile:profiles!buyer_id(name,avatar_url)'
+        )
+        .eq('artist_id', artistId)
+        .eq('status', 'requested')
+        .order('created_at', { ascending: false });
 
-  // Separate pending vs active
-  const pendingProjects = projects.filter(p => p.status === 'pending');
-  const activeProjects = projects.filter(p => p.status !== 'pending' && p.status !== 'rejected' && p.status !== 'cancelled');
-
-  async function onAccept(projectId: string) {
-    if (!agreedTerms.has(projectId)) {
-      Alert.alert('Terms Required', 'Please agree to the Terms and Conditions first.');
-      return;
+      if (error) throw error;
+      setOrders((data ?? []) as ArtworkOrder[]);
+    } catch (e: any) {
+      console.warn('[ConsultantDashboard] artwork_orders fetch error:', e.message);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    const result = await handleAction(projectId, 'accepted');
-    if (result.success) {
-      Alert.alert('Done', 'Request accepted! The buyer has been notified.');
-    } else {
-      Alert.alert('Error', result.error ?? 'Something went wrong.');
-    }
   }
 
-  async function onReject(projectId: string) {
-    Alert.alert('Decline Request', 'Are you sure you want to decline this request?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Decline', style: 'destructive', onPress: async () => {
-          const result = await handleAction(projectId, 'rejected');
-          if (result.success) {
-            Alert.alert('Done', 'Request declined.');
-          } else {
-            Alert.alert('Error', result.error ?? 'Something went wrong.');
-          }
-        }
-      },
-    ]);
-  }
+  useEffect(() => { fetchOrders(); }, [artistId]);
 
-  function onViewWorkorder(project: Project) {
-    navigation.navigate('CreatorWorkorder', { project });
-  }
+  useEffect(() => {
+    if (!artistId) return;
+    fetchConsultantEarnings(artistId)
+      .then(setEarnings)
+      .catch((e) => console.warn('[ConsultantDashboard] earnings error:', e));
+  }, [artistId]);
 
-  function toggleTerms(projectId: string) {
-    setAgreedTerms(prev => {
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchOrders();
+  }, [artistId]);
+
+  function toggleTerms(orderId: string) {
+    setAgreedOrders((prev) => {
       const next = new Set(prev);
-      if (next.has(projectId)) next.delete(projectId);
-      else next.add(projectId);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
       return next;
     });
   }
 
-  function formatCurrency(amount: number) {
-    return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  async function onAccept(order: ArtworkOrder) {
+    if (!agreedOrders.has(order.id)) {
+      Alert.alert('Terms Required', 'Please agree to the Terms and Conditions first.');
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('artwork_orders')
+        .update({ status: 'accepted', updated_at: new Date().toISOString() })
+        .eq('id', order.id);
+      if (error) throw error;
+      Alert.alert('Done', 'Request accepted! The buyer has been notified.');
+      fetchOrders();
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Something went wrong.');
+    }
+  }
+
+  async function onDecline(order: ArtworkOrder) {
+    Alert.alert('Decline Request', 'Are you sure you want to decline this request?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Decline',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const { error } = await supabase
+              .from('artwork_orders')
+              .update({ status: 'declined', updated_at: new Date().toISOString() })
+              .eq('id', order.id);
+            if (error) throw error;
+            Alert.alert('Done', 'Request declined.');
+            fetchOrders();
+          } catch (e: any) {
+            Alert.alert('Error', e.message ?? 'Something went wrong.');
+          }
+        },
+      },
+    ]);
   }
 
   function formatAmount(amount: number): string {
@@ -118,44 +146,46 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
     return `₹${amount.toLocaleString('en-IN')}`;
   }
 
-  // Fetch earnings on mount
-  React.useEffect(() => {
-    if (!consultantUserId) return;
-    fetchConsultantEarnings(consultantUserId)
-      .then(setEarnings)
-      .catch(e => console.warn('[ConsultantDashboard] earnings error:', e));
-  }, [consultantUserId]);
+  function formatCurrency(amount: number) {
+    return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  }
 
-  // ─── Render a pending request card (Figma "Sales Dashboard") ──
-  function renderPendingCard({ item }: { item: Project }) {
-    const isAgreed = agreedTerms.has(item.id);
+  function renderPendingCard({ item }: { item: ArtworkOrder }) {
+    const isAgreed = agreedOrders.has(item.id);
+    const artwork = item.shop_products;
+    const coverImage = artwork?.images?.[0] ?? null;
+    const buyerName = (item.buyer_profile as any)?.name ?? 'Collector';
 
     return (
       <View style={styles.requestCard}>
-        {/* Card header */}
-        <Text style={styles.requestTitle}>Request received{'\n'}for Purchase</Text>
+        <Text style={styles.requestTitle}>{'Request received\nfor Purchase'}</Text>
 
-        {/* Artwork detail */}
         <Text style={styles.sectionLabel}>ARTWORK DETAIL</Text>
         <View style={styles.artworkImageContainer}>
-          <View style={styles.artworkPlaceholder}>
-            <Text style={styles.artworkName}>{item.assignment_type || 'Untitled'}</Text>
-            <Text style={styles.artworkCategory}>
-              {item.assignment_details?.[0] || 'Creative Work'}
-            </Text>
-          </View>
+          {coverImage ? (
+            <Image source={{ uri: coverImage }} style={styles.artworkImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.artworkPlaceholder}>
+              <Text style={styles.artworkName}>{artwork?.title ?? 'Untitled'}</Text>
+              <Text style={styles.artworkCategory}>{artwork?.category ?? 'Artwork'}</Text>
+            </View>
+          )}
+          {coverImage && (
+            <View style={styles.artworkOverlay}>
+              <Text style={styles.artworkName}>{artwork?.title ?? 'Untitled'}</Text>
+              <Text style={styles.artworkCategory}>{artwork?.category ?? 'Artwork'}</Text>
+            </View>
+          )}
         </View>
 
-        {/* Delivery Address */}
         <View style={styles.infoRow}>
           <Truck size={18} color={ORANGE_TITLE} strokeWidth={2} />
           <Text style={styles.infoLabel}>DELIVERY ADDRESS</Text>
         </View>
         <Text style={styles.infoText}>
-          {profile?.address || 'Address will be confirmed by buyer'}
+          {item.delivery_address || 'Address will be confirmed by buyer'}
         </Text>
 
-        {/* Payment Status */}
         <View style={[styles.infoRow, { marginTop: spacing.xl }]}>
           <CreditCard size={18} color={ORANGE_TITLE} strokeWidth={2} />
           <Text style={styles.infoLabel}>PAYMENT STATUS</Text>
@@ -167,14 +197,25 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
           </View>
           <View style={styles.bulletRow}>
             <View style={styles.bullet} />
-            <Text style={styles.infoText}>Artwork cost: ({formatCurrency(item.budget)})</Text>
+            <Text style={styles.infoText}>Artwork cost: ({formatCurrency(item.artwork_price ?? 0)})</Text>
           </View>
           <Text style={styles.paymentNote}>
             Funds will be released upon delivery confirmation.
           </Text>
         </View>
 
-        {/* Terms checkbox */}
+        {/* About the buyer */}
+        <Text style={styles.sectionLabel}>ABOUT THE BUYER</Text>
+        <View style={styles.buyerRow}>
+          <View style={styles.buyerAvatar}>
+            <Text style={styles.buyerInitial}>{buyerName.charAt(0).toUpperCase()}</Text>
+          </View>
+          <View>
+            <Text style={styles.buyerName}>{buyerName}</Text>
+            <Text style={styles.buyerTag}>Verified Collector since 2021</Text>
+          </View>
+        </View>
+
         <TouchableOpacity
           style={styles.termsRow}
           onPress={() => toggleTerms(item.id)}
@@ -188,11 +229,10 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
           </Text>
         </TouchableOpacity>
 
-        {/* Accept / Decline buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={[styles.acceptBtn, !isAgreed && { opacity: 0.5 }]}
-            onPress={() => onAccept(item.id)}
+            onPress={() => onAccept(item)}
             disabled={!isAgreed}
             activeOpacity={0.85}
           >
@@ -200,43 +240,30 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.declineBtn}
-            onPress={() => onReject(item.id)}
+            onPress={() => onDecline(item)}
             activeOpacity={0.85}
           >
-            <Text style={styles.declineText}>Decline</Text>
+            <Text style={styles.declineText}>Pass on</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
 
-  // ─── Render an active project card ────────────────────────────
-  function renderActiveCard({ item }: { item: Project }) {
-    return (
-      <ProjectCard
-        project={item}
-        onAccept={onAccept}
-        onReject={onReject}
-        onViewWorkorder={onViewWorkorder}
-      />
-    );
-  }
-
-  // ─── List sections ────────────────────────────────────────────
-  type SectionItem = { type: 'header' } | { type: 'active_header' } | { type: 'pending'; project: Project } | { type: 'active'; project: Project } | { type: 'empty' };
+  type SectionItem =
+    | { type: 'header' }
+    | { type: 'pending'; order: ArtworkOrder }
+    | { type: 'empty' };
 
   const sections: SectionItem[] = [];
   sections.push({ type: 'header' });
 
-  pendingProjects.forEach(p => sections.push({ type: 'pending', project: p }));
-
-  if (activeProjects.length > 0) {
-    sections.push({ type: 'active_header' });
-    activeProjects.forEach(p => sections.push({ type: 'active', project: p }));
-  }
-
-  if (pendingProjects.length === 0 && activeProjects.length === 0) {
+  if (loading) {
+    // loading handled outside FlatList
+  } else if (orders.length === 0) {
     sections.push({ type: 'empty' });
+  } else {
+    orders.forEach((o) => sections.push({ type: 'pending', order: o }));
   }
 
   return (
@@ -255,29 +282,43 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
               if (section.type === 'header') {
                 return (
                   <View style={styles.headerSection}>
-                    <Text style={styles.dashboardTitle}>Creator's{'\n'}Dashboard</Text>
-                    
-                    {/* Quick Action Grid */}
+                    <Text style={styles.dashboardTitle}>{'Sales\nDashboard'}</Text>
+                    <Text style={styles.dashboardSubtitle}>
+                      Manage your creative transactions, pending artwork requests, and fulfillment status for your global collectors.
+                    </Text>
+
+                    {/* Utility navigation tiles */}
                     <View style={styles.quickGrid}>
-                      <TouchableOpacity style={[styles.quickBtn, styles.quickBtnActive]} activeOpacity={0.8}>
-                        <Text style={[styles.quickLabel, styles.quickLabelActive]}>Sales{'\n'}Dashboard</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.quickBtn} activeOpacity={0.8}>
-                        <Text style={styles.quickLabel}>Project{'\n'}Dashboard</Text>
+                      <TouchableOpacity
+                        style={styles.quickBtn}
+                        onPress={() => (navigation as any).navigate('ConsultantEarningsHistory')}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.quickLabel}>{'Sales\nHistory'}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.quickBtn}
-                        onPress={() => (navigation as any).navigate('History')}
+                        onPress={() => (navigation as any).navigate('ConsultantProjectManagement')}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.quickLabel}>Sales{'\n'}History</Text>
+                        <Text style={styles.quickLabel}>{'Manage\nProjects'}</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.quickBtn} activeOpacity={0.8}>
-                        <Text style={styles.quickLabel}>Manage{'\n'}Projects</Text>
+                      <TouchableOpacity
+                        style={styles.quickBtn}
+                        onPress={() => (navigation as any).navigate('ConsultantPortfolioUpdate')}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.quickLabel}>{'Update\nPortfolio'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.quickBtn}
+                        onPress={() => (navigation as any).navigate('ConsultantServicePricing')}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.quickLabel}>{'Service\nPricing'}</Text>
                       </TouchableOpacity>
                     </View>
 
-                    {/* Earnings Summary Card — Figma Sales Dashboard-1 */}
                     <View style={styles.earningsCard}>
                       <Text style={styles.earningsLabel}>TOTAL EARNED</Text>
                       <Text style={styles.earningsAmount}>{formatAmount(earnings.total)}</Text>
@@ -295,40 +336,30 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
                         </View>
                       </View>
                     </View>
+                  </View>
+                );
+              }
 
-                    {error && (
-                      <View style={styles.errorBanner}>
-                        <Text style={styles.errorText}>⚠ {error}</Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              }
-              if (section.type === 'pending') return renderPendingCard({ item: section.project });
-              if (section.type === 'active_header') {
-                return (
-                  <View style={styles.activeHeader}>
-                    <Text style={styles.activeTitle}>Active Projects</Text>
-                    <Text style={styles.activeCount}>{activeProjects.length} in progress</Text>
-                  </View>
-                );
-              }
-              if (section.type === 'active') return renderActiveCard({ item: section.project });
+              if (section.type === 'pending') return renderPendingCard({ item: section.order });
+
               if (section.type === 'empty') {
                 return (
                   <View style={styles.emptyState}>
                     <FileText size={48} color="#D1D5DB" />
-                    <Text style={styles.emptyTitle}>No requests yet</Text>
-                    <Text style={styles.emptySubtitle}>Purchase and project requests will appear here</Text>
+                    <Text style={styles.emptyTitle}>No purchase requests yet</Text>
+                    <Text style={styles.emptySubtitle}>
+                      Incoming artwork purchase requests will appear here
+                    </Text>
                   </View>
                 );
               }
+
               return null;
             }}
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
             showsVerticalScrollIndicator={false}
             refreshControl={
-              <RefreshControl refreshing={false} onRefresh={refresh} tintColor={colors.primary} />
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
             }
           />
         )}
@@ -341,19 +372,26 @@ const styles = StyleSheet.create({
   bg: { flex: 1, backgroundColor: colors.screenBg },
   safe: { flex: 1 },
 
-  // ── Header ────────────────────────────────────
   headerSection: { paddingTop: 16, marginBottom: 8 },
   dashboardTitle: {
     fontSize: 36,
     fontWeight: '800',
     fontFamily: fonts.heavy,
-    color: '#2D8B7F',
+    color: ORANGE_TITLE,
     lineHeight: 42,
     textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  dashboardSubtitle: {
+    fontSize: fontSizes.sm,
+    fontFamily: fonts.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
     marginBottom: spacing.lg,
+    paddingHorizontal: 8,
   },
 
-  // ── Quick action grid ─────────────────────────
   quickGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -389,14 +427,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // ── Error ─────────────────────────────────────
-  errorBanner: {
-    backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA',
-    borderRadius: 8, padding: 12, marginBottom: 12,
-  },
-  errorText: { color: '#DC2626', fontSize: 13, fontFamily: fonts.body },
-
-  // ── Request Card (Figma Sales Dashboard) ──────
   requestCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -418,7 +448,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
 
-  // ── Artwork ───────────────────────────────────
   sectionLabel: {
     fontSize: fontSizes.sm,
     fontWeight: '700',
@@ -432,11 +461,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: spacing.xl,
     height: 200,
+    position: 'relative',
   },
+  artworkImage: { width: '100%', height: '100%' },
   artworkPlaceholder: {
     flex: 1,
     backgroundColor: '#2D2D2D',
     justifyContent: 'flex-end',
+    padding: spacing.lg,
+  },
+  artworkOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
     padding: spacing.lg,
   },
   artworkName: {
@@ -452,7 +491,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ── Info rows ─────────────────────────────────
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -472,9 +510,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: 22,
   },
-  paymentInfo: {
-    marginBottom: spacing.lg,
-  },
+  paymentInfo: { marginBottom: spacing.lg },
   bulletRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -497,7 +533,24 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // ── Terms ─────────────────────────────────────
+  buyerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 12,
+  },
+  buyerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#2D8B7F',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buyerInitial: { fontSize: 18, fontWeight: '800', color: '#fff', fontFamily: fonts.heavy },
+  buyerName: { fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy, color: NAVY },
+  buyerTag: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textSecondary },
+
   termsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -514,26 +567,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxChecked: {
-    backgroundColor: NAVY,
-    borderColor: NAVY,
-  },
+  checkboxChecked: { backgroundColor: NAVY, borderColor: NAVY },
   termsText: {
     fontSize: fontSizes.base,
     fontFamily: fonts.body,
     color: colors.textPrimary,
     flex: 1,
   },
-  termsLink: {
-    color: colors.primary,
-    textDecorationLine: 'underline',
-  },
+  termsLink: { color: colors.primary, textDecorationLine: 'underline' },
 
-  // ── Action buttons ────────────────────────────
-  actionRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
+  actionRow: { flexDirection: 'row', gap: spacing.md },
   acceptBtn: {
     backgroundColor: ACCEPT_BG,
     borderRadius: radii.md,
@@ -541,13 +584,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing['2xl'],
     alignItems: 'center',
     justifyContent: 'center',
+    flex: 1.5,
   },
-  acceptText: {
-    color: '#fff',
-    fontSize: fontSizes.base,
-    fontWeight: '700',
-    fontFamily: fonts.heavy,
-  },
+  acceptText: { color: '#fff', fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
   declineBtn: {
     borderWidth: 1.5,
     borderColor: DECLINE_COLOR,
@@ -558,38 +597,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
   },
-  declineText: {
-    color: DECLINE_COLOR,
-    fontSize: fontSizes.base,
-    fontWeight: '700',
-    fontFamily: fonts.heavy,
-  },
+  declineText: { color: DECLINE_COLOR, fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
 
-  // ── Active section ────────────────────────────
-  activeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    marginTop: 8,
-  },
-  activeTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  activeCount: {
-    fontSize: 13,
-    fontFamily: fonts.body,
-    color: colors.textSecondary,
-  },
-
-  // ── Empty state ───────────────────────────────
   emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#9CA3AF' },
   emptySubtitle: { fontSize: 13, fontFamily: fonts.body, color: '#D1D5DB', textAlign: 'center' },
 
-  // ── Earnings Card (Sales Dashboard-1) ─────────
   earningsCard: {
     backgroundColor: '#1A2C4E',
     borderRadius: radii.xl,
@@ -604,19 +617,11 @@ const styles = StyleSheet.create({
     fontSize: 38, fontWeight: '800', fontFamily: fonts.heavy,
     color: '#FFFFFF', marginBottom: spacing.lg,
   },
-  earningsRow: {
-    flexDirection: 'row', alignItems: 'center',
-  },
-  earningsItem: {
-    flex: 1, alignItems: 'center', gap: 4,
-  },
+  earningsRow: { flexDirection: 'row', alignItems: 'center' },
+  earningsItem: { flex: 1, alignItems: 'center', gap: 4 },
   earningsDivider: {
     width: 1, height: 40, backgroundColor: 'rgba(255,255,255,0.15)', marginHorizontal: spacing.md,
   },
-  earningsItemLabel: {
-    fontSize: fontSizes.xs, fontFamily: fonts.body, color: '#9CA3AF',
-  },
-  earningsItemValue: {
-    fontSize: fontSizes.lg, fontWeight: '700', fontFamily: fonts.heavy, color: '#7DD3C0',
-  },
+  earningsItemLabel: { fontSize: fontSizes.xs, fontFamily: fonts.body, color: '#9CA3AF' },
+  earningsItemValue: { fontSize: fontSizes.lg, fontWeight: '700', fontFamily: fonts.heavy, color: '#7DD3C0' },
 });

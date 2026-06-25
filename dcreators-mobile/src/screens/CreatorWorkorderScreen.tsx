@@ -1,9 +1,9 @@
-// ============================================================
-// CreatorWorkorderScreen — Consultant Project Flow (Figma Match)
-// ============================================================
-// Matches: "Negotition.png"
-// Shows round-by-round: client feedback → upload slot → submit
-// ============================================================
+// CreatorWorkorderScreen — Consultant Project Dashboard (consolidated)
+// CONSULTANT-only. Renders the correct state based on project status:
+//   NEGOTIATION (assigned/advance_pending) → Submit Offer
+//   COLLABORATION (in_progress + collab tab) → Search & invite consultant
+//   REVIEW-UPLOAD (in_progress/review_1/review_2/final_review) → Upload designs
+// Figma: Negotition.png | Collaboration Deshboard.png | Project Dashboard.png
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -17,10 +17,13 @@ import { sendNotification } from '../lib/notifications';
 import * as ImagePicker from 'expo-image-picker';
 import {
   FileText, ImageIcon, Info, X, ImagePlus, Upload,
-  MessageCircle, ChevronRight, Download,
+  MessageCircle, Download, Users, BadgeCheck,
 } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
-import type { Submission } from '../types';
+import type { Submission, ConsultantProfile } from '../types';
+
+const NEGOTIATION_STATUSES = ['assigned', 'advance_pending'];
+const UPLOAD_STATUSES = ['in_progress', 'review_1', 'review_2', 'final_review', 'work_order_accepted'];
 
 const ROUND_META: Record<string, { label: string; uploadLabel: string; submitLabel: string }> = {
   review_1: {
@@ -45,7 +48,15 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Upload state
+  const [proposedAmount, setProposedAmount] = useState(project?.final_offer ? String(project.final_offer) : '');
+  const [proposedDeadline, setProposedDeadline] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const [collaborators, setCollaborators] = useState<ConsultantProfile[]>([]);
+  const [selectedCollab, setSelectedCollab] = useState<ConsultantProfile | null>(null);
+  const [loadingCollab, setLoadingCollab] = useState(false);
+  const [showCollab, setShowCollab] = useState(false);
+
   const [uploadRound, setUploadRound] = useState<'review_1' | 'review_2' | 'final' | null>(null);
   const [uploadFiles, setUploadFiles] = useState<string[]>([]);
   const [uploadNote, setUploadNote] = useState('');
@@ -55,10 +66,17 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
     ? `D/${new Date(project.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '/')}`
     : 'D/--/--/--';
 
-  const status = project?.status || 'pending';
+  const status = project?.status || 'assigned';
   const assignmentType = project?.assignment_type
     ? project.assignment_type.charAt(0).toUpperCase() + project.assignment_type.slice(1).replace(/_/g, ' ')
     : 'Creative Service';
+  const budget = project?.budget ? Number(project.budget) : 0;
+  const deadlineFormatted = (() => {
+    if (!project?.deadline) return 'Not set';
+    const d = new Date(project.deadline);
+    const diff = Math.ceil((d.getTime() - Date.now()) / 86400000);
+    return `${d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} ${new Date().getFullYear()} — (${Math.max(0, diff)} Days)`;
+  })();
 
   const fetchSubmissions = useCallback(async () => {
     if (!project?.id) return;
@@ -150,16 +168,70 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
     finally { setIsUploading(false); }
   }
 
-  // ── Accept project ────────────────────────────────────────
-  async function handleAccept() {
+
+  async function handleSubmitOffer() {
+    const amount = parseFloat(proposedAmount.replace(/[^0-9.]/g, ''));
+    if (!amount || amount <= 0) { Alert.alert('Invalid', 'Enter a valid proposed amount.'); return; }
     if (!project?.id) return;
+    setSubmitting(true);
     try {
-      const { error } = await supabase.from('projects').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', project.id);
+      const { error } = await supabase.from('projects').update({
+        final_offer: amount,
+        status: 'advance_pending',
+        updated_at: new Date().toISOString(),
+      }).eq('id', project.id);
       if (error) { Alert.alert('Error', error.message); return; }
-      Alert.alert('Accepted!', 'Project accepted. Client will pay advance.');
-      navigation.goBack();
-    } catch { Alert.alert('Error', 'Something went wrong.'); }
+      if (project.client_id) {
+        sendNotification({
+          userId: project.client_id,
+          title: 'Consultant Offer Received',
+          message: `Your consultant submitted an offer of ₹${amount.toLocaleString('en-IN')}. Please pay the advance.`,
+          type: 'assignment',
+        });
+      }
+      Alert.alert('Offer Submitted ✅', `Offer of ₹${amount.toLocaleString('en-IN')} sent. Awaiting client advance payment.`, [
+        { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Dashboard' }) },
+      ]);
+    } catch (err: any) { Alert.alert('Error', err.message); }
+    finally { setSubmitting(false); }
   }
+
+  async function fetchCollaborators() {
+    setLoadingCollab(true);
+    try {
+      const { data } = await supabase
+        .from('consultant_profiles')
+        .select('*')
+        .eq('is_approved', true)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      setCollaborators(data ?? []);
+      if (data && data.length > 0) setSelectedCollab(data[0]);
+    } catch {} finally { setLoadingCollab(false); }
+  }
+
+  async function handleCollaborate() {
+    if (!selectedCollab || !project) return;
+    Alert.alert('Initiate Collaboration?', `Request ${selectedCollab.display_name} to collaborate?`, [
+      { text: 'Cancel' },
+      { text: 'Send Request', onPress: async () => {
+        try {
+          await supabase.from('collaboration_requests').insert({
+            project_id: project.id,
+            requester_id: project.consultant_id,
+            collaborator_id: selectedCollab.user_id,
+            status: 'pending',
+            created_at: new Date().toISOString(),
+          });
+          Alert.alert('Request Sent ✅', `${selectedCollab.display_name} has been invited.`);
+        } catch (e: any) { Alert.alert('Error', e.message); }
+      }},
+    ]);
+  }
+
+  const isNegotiation = NEGOTIATION_STATUSES.includes(status);
+  const isUpload = UPLOAD_STATUSES.includes(status);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -168,94 +240,177 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
         <View style={styles.loadingWrap}><ActivityIndicator size="large" color={colors.orange} /></View>
       ) : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Header */}
+
+          {/* Screen title */}
+          <Text style={styles.screenTitle}>Project{'\n'}Dashboard</Text>
           <View style={styles.headerSection}>
             <Text style={styles.projectTitle}>Project Assignment - {projectCode}</Text>
             <Text style={styles.projectSubtitle}>Incoming Request from "{project?.client_name || 'Client'}"</Text>
           </View>
 
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText}>{assignmentType.toUpperCase()}</Text>
-          </View>
-
-          {/* Project brief */}
-          {project?.assignment_brief && (
-            <View style={styles.briefCard}>
-              <Text style={styles.briefTitle}>
-                {project.assignment_details?.[0] || assignmentType}
+          {/* Mode banner */}
+          {isNegotiation && (
+            <View style={styles.negotiationBanner}>
+              <Text style={styles.negotiationBannerText}>
+                The project is open for Negotiation in{'\n'}Project Cost and Project Deadline
               </Text>
-              <Text style={styles.briefText}>{project.assignment_brief}</Text>
+            </View>
+          )}
+          {isUpload && showCollab && (
+            <View style={[styles.negotiationBanner, { backgroundColor: '#7B3F00' }]}>
+              <Text style={styles.negotiationBannerText}>The project is open for Collaboration</Text>
             </View>
           )}
 
-          {/* Accept button for pending */}
-          {status === 'pending' && (
-            <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept}>
-              <Text style={styles.acceptBtnText}>Accept Assignment</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Timeline: show feedback + upload slots per round */}
-          <View style={styles.timelineContainer}>
-            {/* Round 1 feedback + upload for round 2 */}
-            {round1?.client_action === 'revert' && (
-              <FeedbackRoundCard
-                round="review_1"
-                submission={round1}
-              />
-            )}
-
-            {/* Round 2 slot */}
-            {nextUploadRound === 'review_2' && (
-              <UploadSlotCard
-                round="review_2"
-                onUpload={() => setUploadRound('review_2')}
-              />
-            )}
-            {round2 && (
-              <SubmittedCard submission={round2} round="review_2" navigation={navigation} />
-            )}
-
-            {/* Round 2 feedback + upload for final */}
-            {round2?.client_action === 'revert' && (
-              <FeedbackRoundCard round="review_2" submission={round2} />
-            )}
-
-            {nextUploadRound === 'final' && (
-              <UploadSlotCard round="final" onUpload={() => setUploadRound('final')} />
-            )}
-            {roundFinal && (
-              <SubmittedCard submission={roundFinal} round="final" navigation={navigation} />
-            )}
-
-            {/* Final feedback */}
-            {roundFinal?.client_action && (
-              <FeedbackRoundCard round="final" submission={roundFinal} />
-            )}
-
-            {/* First upload slot if nothing submitted */}
-            {nextUploadRound === 'review_1' && status !== 'pending' && (
-              <UploadSlotCard round="review_1" onUpload={() => setUploadRound('review_1')} isFirst />
-            )}
-            {round1 && !round1.client_action && (
-              <SubmittedCard submission={round1} round="review_1" navigation={navigation} />
-            )}
-
-            {/* Release final design */}
-            {roundFinal?.client_action === 'approve' && (
-              <View style={styles.releaseSection}>
-                <Text style={styles.releaseNote}>Received the Final Payment</Text>
-                <TouchableOpacity style={styles.releaseBtn}>
-                  <Download size={16} color={colors.textOnPrimary} />
-                  <Text style={styles.releaseBtnText}>Release The Final Design</Text>
-                </TouchableOpacity>
+          {/* Project info card */}
+          <View style={styles.briefCard}>
+            <Text style={styles.briefTitle}>{project?.assignment_details?.[0] || assignmentType}</Text>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>ESTIMATED BUDGET</Text>
+              <Text style={styles.infoValue}>₹{budget.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>PROJECT DEADLINE</Text>
+              <Text style={styles.briefText}>{deadlineFormatted}</Text>
+            </View>
+            {project?.assignment_brief && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>BRIEF</Text>
+                <Text style={styles.briefText}>{project.assignment_brief}</Text>
               </View>
             )}
           </View>
+
+          {/* ── NEGOTIATION MODE ── */}
+          {isNegotiation && (
+            <View style={styles.negotiationCard}>
+              <Text style={styles.sectionLabel}>Negotiable amount</Text>
+              <View style={styles.amountInputRow}>
+                <Text style={styles.rupee}>₹</Text>
+                <TextInput
+                  style={styles.amountField}
+                  placeholder="Enter your proposed amount"
+                  placeholderTextColor={colors.textTertiary}
+                  value={proposedAmount}
+                  onChangeText={setProposedAmount}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Suggested Deadline</Text>
+              <TextInput
+                style={styles.deadlineField}
+                placeholder="00/00/2026 — Day — 00"
+                placeholderTextColor={colors.textTertiary}
+                value={proposedDeadline}
+                onChangeText={setProposedDeadline}
+              />
+              <TouchableOpacity
+                style={[styles.submitOfferBtn, submitting && { opacity: 0.6 }]}
+                onPress={handleSubmitOffer}
+                disabled={submitting}
+              >
+                {submitting
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.submitOfferBtnText}>Submit Offer</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── COLLABORATION TAB (toggle visible in upload mode) ── */}
+          {isUpload && (
+            <View style={styles.collabToggleRow}>
+              <TouchableOpacity
+                style={[styles.collabTab, !showCollab && styles.collabTabActive]}
+                onPress={() => setShowCollab(false)}
+              >
+                <Text style={[styles.collabTabText, !showCollab && styles.collabTabTextActive]}>Upload Work</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.collabTab, showCollab && styles.collabTabActive]}
+                onPress={() => { setShowCollab(true); if (collaborators.length === 0) fetchCollaborators(); }}
+              >
+                <Users size={13} color={showCollab ? '#fff' : colors.textSecondary} />
+                <Text style={[styles.collabTabText, showCollab && styles.collabTabTextActive]}>Collaboration</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── COLLABORATION PANEL ── */}
+          {isUpload && showCollab && (
+            <View style={styles.collabPanel}>
+              <Text style={styles.collabSearchLabel}>SEARCH CREATIVE CONSULTANT{'\n'}FOR COLLABORATION</Text>
+              {loadingCollab
+                ? <ActivityIndicator size="small" color={colors.teal} style={{ marginTop: 16 }} />
+                : <>
+                    <View style={styles.candidateRow}>
+                      <Text style={styles.candidateText}>Total Candidates ({collaborators.length})</Text>
+                    </View>
+                    {collaborators.slice(0, 3).map(c => {
+                      const sel = selectedCollab?.id === c.id;
+                      return (
+                        <TouchableOpacity key={c.id} style={[styles.consultantCard, sel && styles.consultantCardSel]} onPress={() => setSelectedCollab(c)}>
+                          {c.avatar_url
+                            ? <Image source={{ uri: c.avatar_url }} style={styles.consultantAvatar} />
+                            : <View style={[styles.consultantAvatar, styles.consultantAvatarFb]}>
+                                <Text style={styles.consultantAvatarInit}>{c.display_name.charAt(0).toUpperCase()}</Text>
+                              </View>
+                          }
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.consultantName}>{c.display_name}</Text>
+                            <Text style={styles.consultantCode}>Code: {c.code}</Text>
+                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                              {c.experience && <View style={styles.badge}><Text style={styles.badgeText}>{c.experience} Years</Text></View>}
+                              {c.is_approved && (
+                                <View style={[styles.badge, { backgroundColor: '#EEF9F8', flexDirection: 'row', gap: 4 }]}>
+                                  <BadgeCheck size={10} color={colors.teal} />
+                                  <Text style={[styles.badgeText, { color: colors.teal }]}>Verified Pro</Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                          {sel && (
+                            <TouchableOpacity style={styles.collaborateBtn} onPress={handleCollaborate}>
+                              <Text style={styles.collaborateBtnText}>Collaborate Now</Text>
+                            </TouchableOpacity>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+              }
+            </View>
+          )}
+
+          {/* ── REVIEW-UPLOAD MODE ── */}
+          {isUpload && !showCollab && (
+            <View style={styles.timelineContainer}>
+              {round1?.client_action === 'revert' && <FeedbackRoundCard round="review_1" submission={round1} />}
+              {nextUploadRound === 'review_2' && <UploadSlotCard round="review_2" onUpload={() => setUploadRound('review_2')} />}
+              {round2 && <SubmittedCard submission={round2} round="review_2" navigation={navigation} />}
+              {round2?.client_action === 'revert' && <FeedbackRoundCard round="review_2" submission={round2} />}
+              {nextUploadRound === 'final' && <UploadSlotCard round="final" onUpload={() => setUploadRound('final')} />}
+              {roundFinal && <SubmittedCard submission={roundFinal} round="final" navigation={navigation} />}
+              {roundFinal?.client_action && <FeedbackRoundCard round="final" submission={roundFinal} />}
+              {nextUploadRound === 'review_1' && (
+                <UploadSlotCard round="review_1" onUpload={() => setUploadRound('review_1')} isFirst />
+              )}
+              {round1 && !round1.client_action && <SubmittedCard submission={round1} round="review_1" navigation={navigation} />}
+              {roundFinal?.client_action === 'approve' && (
+                <View style={styles.releaseSection}>
+                  <Text style={styles.releaseNote}>Final payment received — release your designs</Text>
+                  <TouchableOpacity style={styles.releaseBtn}>
+                    <Download size={16} color={colors.textOnPrimary} />
+                    <Text style={styles.releaseBtnText}>Release The Final Design</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
         </ScrollView>
       )}
 
-      {/* Bottom nav */}
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.bottomBackBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.bottomBackText}>← Back</Text>
@@ -266,27 +421,21 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* Upload Modal */}
       <Modal visible={!!uploadRound} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {uploadRound ? ROUND_META[uploadRound]?.uploadLabel : 'Upload'}
-              </Text>
+              <Text style={styles.modalTitle}>{uploadRound ? ROUND_META[uploadRound]?.uploadLabel : 'Upload'}</Text>
               <TouchableOpacity onPress={() => { setUploadRound(null); setUploadFiles([]); setUploadNote(''); }}>
                 <X size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
-
             <View style={styles.uploadHint}>
               <Info size={14} color={colors.teal} />
               <Text style={styles.uploadHintText}>
-                Upload the design as per{'\n'}
-                {uploadRound === 'review_2' ? '1st client review' : uploadRound === 'final' ? '2nd client review' : 'the assignment brief'}
+                Upload per{'\n'}{uploadRound === 'review_2' ? '1st client review' : uploadRound === 'final' ? '2nd client review' : 'assignment brief'}
               </Text>
             </View>
-
             <Text style={styles.modalLabel}>Design Files ({uploadFiles.length}/3)</Text>
             <View style={styles.fileGrid}>
               {uploadFiles.map((uri, i) => (
@@ -304,7 +453,6 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
                 </TouchableOpacity>
               )}
             </View>
-
             <Text style={styles.modalLabel}>Note to Client</Text>
             <TextInput
               style={styles.noteInput}
@@ -314,12 +462,9 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
               placeholderTextColor={colors.textTertiary}
               multiline
             />
-
             <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleSubmitDesign} disabled={isUploading}>
               {isUploading ? <ActivityIndicator color={colors.textOnPrimary} size="small" /> : (
-                <Text style={styles.modalSubmitText}>
-                  {uploadRound ? ROUND_META[uploadRound]?.submitLabel : 'Submit'}
-                </Text>
+                <Text style={styles.modalSubmitText}>{uploadRound ? ROUND_META[uploadRound]?.submitLabel : 'Submit'}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -390,9 +535,49 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 100 },
 
+  screenTitle: { fontSize: 36, fontWeight: '800', fontFamily: fonts.heavy, color: '#E87B35', paddingHorizontal: spacing.xl, paddingTop: 16, lineHeight: 42 },
   headerSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md },
   projectTitle: { fontSize: fontSizes['2xl'], fontWeight: '700', fontFamily: fonts.heavy, color: colors.orange, marginBottom: spacing.xs },
   projectSubtitle: { fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textSecondary },
+
+  negotiationBanner: { backgroundColor: '#1B3A5C', marginHorizontal: spacing.xl, borderRadius: 12, padding: 16, marginBottom: 14 },
+  negotiationBannerText: { color: '#fff', fontSize: fontSizes.sm, fontFamily: fonts.medium, lineHeight: 20 },
+
+  infoRow: { marginBottom: 10 },
+  infoLabel: { fontSize: 10, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textTertiary, letterSpacing: 0.7, marginBottom: 2 },
+  infoValue: { fontSize: fontSizes.lg, fontWeight: '700', fontFamily: fonts.heavy, color: '#1B3A5C' },
+
+  negotiationCard: { backgroundColor: '#fff', marginHorizontal: spacing.xl, borderRadius: 16, padding: 20, marginBottom: 16, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 }, android: { elevation: 3 } }) },
+  sectionLabel: { fontSize: 11, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textSecondary, letterSpacing: 0.5, marginBottom: 8 },
+  amountInputRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.borderInput, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#FAFAFA', gap: 6 },
+  rupee: { fontSize: 20, fontWeight: '700', fontFamily: fonts.heavy, color: '#1B3A5C' },
+  amountField: { flex: 1, fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textPrimary },
+  deadlineField: { borderWidth: 1, borderColor: colors.borderInput, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textPrimary, backgroundColor: '#FAFAFA' },
+  submitOfferBtn: { backgroundColor: '#1B3A5C', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 16 },
+  submitOfferBtnText: { color: '#fff', fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
+
+  collabToggleRow: { flexDirection: 'row', marginHorizontal: spacing.xl, marginBottom: 12, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: colors.borderLight },
+  collabTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, backgroundColor: '#F3F4F6' },
+  collabTabActive: { backgroundColor: '#1B3A5C' },
+  collabTabText: { fontSize: fontSizes.sm, fontFamily: fonts.medium, color: colors.textSecondary },
+  collabTabTextActive: { color: '#fff', fontWeight: '700' },
+
+  collabPanel: { marginHorizontal: spacing.xl, marginBottom: 16 },
+  collabSearchLabel: { fontSize: 13, fontWeight: '700', fontFamily: fonts.heavy, color: '#1B3A5C', lineHeight: 20, marginBottom: 12 },
+  candidateRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  candidateText: { fontSize: fontSizes.sm, fontFamily: fonts.body, color: colors.textSecondary },
+  consultantCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'flex-start', gap: 12, borderWidth: 1, borderColor: colors.borderLight, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 }, android: { elevation: 2 } }) },
+  consultantCardSel: { borderColor: '#1B3A5C', borderWidth: 1.5 },
+  consultantAvatar: { width: 48, height: 48, borderRadius: 24 },
+  consultantAvatarFb: { backgroundColor: '#1B3A5C', alignItems: 'center', justifyContent: 'center' },
+  consultantAvatarInit: { color: '#fff', fontSize: 18, fontWeight: '700', fontFamily: fonts.heavy },
+  consultantName: { fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy, color: '#1B3A5C' },
+  consultantCode: { fontSize: fontSizes.xs, fontFamily: fonts.body, color: colors.textSecondary },
+  badge: { backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { fontSize: 10, fontFamily: fonts.medium, color: colors.textSecondary },
+  collaborateBtn: { backgroundColor: '#E87B35', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, alignSelf: 'center' },
+  collaborateBtnText: { color: '#fff', fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy },
+
 
   categoryBadge: { alignSelf: 'flex-start', marginLeft: spacing.xl, marginBottom: spacing.lg, backgroundColor: '#E0F5F1', paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radii.xl, borderWidth: 1, borderColor: colors.teal },
   categoryBadgeText: { fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy, color: colors.teal, letterSpacing: 0.5 },

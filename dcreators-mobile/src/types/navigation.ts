@@ -53,7 +53,41 @@ export type RootStackParamList = {
   CollaborationDashboard: { project: Project };
   Payment: { project: Project; paymentType: 'advance' | 'balance' };
 
-  // Modals
+  // Phase 3 — Creative Services Workflow (Product A)
+  // owner_role: CLIENT  previous: CLIENT_ASSIGN_PROJECT_SCREEN  next: CLIENT_CONSULTANT_MATCHING_SCREEN
+  ConsultantMatching: { project: Project };
+  // owner_role: CLIENT  previous: CLIENT_ADVANCE_PAYMENT_SCREEN  next: CONSULTANT_WORK_ORDER_SCREEN
+  GenerateWorkOrder: { project: Project; txnId: string; payAmount: number };
+  // owner_role: CONSULTANT  previous: notification  next: CollaborationDashboard (in_progress)
+  ConsultantWorkOrder: { project: Project };
+  // owner_role: CLIENT  previous: PaymentScreen (balance_paid)  next: Main/Dashboard
+  RateConsultant: { project: Project };
+
+  // Phase 4 — Product B: Artwork Marketplace
+  // owner_role: ARTIST  previous: notification (purchase_request)
+  ArtistSalesRequest: { orderId: string };
+  // owner_role: ARTIST  previous: ArtistSalesRequest (accepted)
+  ArtistOrderDispatch: { orderId: string };
+  // owner_role: BUYER  previous: Shop / notification
+  ArtworkOrderTracking: { orderId: string };
+  // owner_role: BUYER  previous: ArtworkOrderTracking  covers advance + balance payment
+  ArtworkPayment: { order: any; paymentType: 'artwork_advance' | 'artwork_balance' };
+  // owner_role: CONSULTANT/ARTIST  Figma: ARTIST_DASHBOARD_SCREEN
+  CreatorDashboard: undefined;
+
+  // Phase 5 — Consultant Management
+  ConsultantEarningsHistory: undefined;
+  ConsultantServicePricing: undefined;
+  ConsultantProjectManagement: undefined;
+  ConsultantProjectCollaboration: { project: any };
+
+  // Phase 6 — Remaining Figma Screens
+  ExploreConsultants: undefined;
+  HireConsultant: { consultant?: any } | undefined;
+  ConsultantPortfolioUpdate: undefined;
+  PaymentConfirmed: { transactionId?: string; amountPaid?: number; paidAt?: string; projectId?: string } | undefined;
+  ArtistSalesRequestDetail: { order: any };
+
   Filter: undefined;
   PortfolioGallery: { images: string[]; initialIndex?: number };
 
@@ -77,7 +111,9 @@ export type MainTabParamList = {
   Search: undefined;
   History: undefined;
   CreatorProfile: { creator: CreatorCardViewModel };
-  AssignProject: { consultant: CreatorCardViewModel };
+  // owner_role: CLIENT  workflow: BIDDING PATH (no consultant pre-selected)
+  // owner_role: CLIENT  workflow: DIRECT HIRE (consultant pre-loaded via creator param)
+  AssignProject: { consultant?: CreatorCardViewModel } | undefined;
   FloatingQuery: undefined;
   CreatorWorkorder: { project: Project };
 };

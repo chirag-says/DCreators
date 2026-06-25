@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Platform, ActivityIndicator, Image, Linking,
+  Platform, ActivityIndicator, Image, Linking, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
@@ -54,9 +54,9 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
     ? `D/${new Date(project.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '/')}`
     : 'D/--/--/--';
 
-  const status = project?.status || 'pending';
-  const isCompleted = status === 'completed' || status === 'balance_paid';
-  const isApproved = status === 'approved' || isCompleted;
+  const status = project?.status || 'assigned';
+  const isCompleted = status === 'completed' || status === 'balance_paid' || status === 'delivered';
+  const isApproved = status === 'final_approved' || isCompleted;
 
   // ─── Fetch all submissions ────────────────────────────────
   const fetchSubmissions = useCallback(async () => {
@@ -94,6 +94,27 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
 
   const clientName = project?.client_name || 'Client';
 
+  async function handleApproveWorkOrder() {
+    if (!project?.id) return;
+    try {
+      const { error } = await supabase.from('projects').update({
+        status: 'in_progress',
+        updated_at: new Date().toISOString(),
+      }).eq('id', project.id);
+      if (error) { Alert.alert('Error', error.message); return; }
+      if (project.consultant_id) {
+        const { sendNotification } = await import('../lib/notifications');
+        sendNotification({
+          userId: project.consultant_id,
+          title: 'Project Started',
+          message: 'The client has approved the Work Order. Your project is now in progress!',
+          type: 'assignment',
+        });
+      }
+      Alert.alert('Project Started ✅', 'Work Order approved. Project is now in progress.');
+    } catch (err: any) { Alert.alert('Error', err.message); }
+  }
+
   // ─── Render ───────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -119,7 +140,21 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
             </Text>
           </View>
 
-          {/* ── Category Badge ─────────────────────────────── */}
+          {/* Step 6: Work Order Accepted — client approves to start */}
+          {status === 'work_order_accepted' && (
+            <View style={styles.approvalBanner}>
+              <Text style={styles.approvalTitle}>Work Order Accepted by Consultant</Text>
+              <Text style={styles.approvalSubtitle}>Review the Work Order and approve to officially start the project.</Text>
+              <TouchableOpacity style={styles.approvalBtn} onPress={handleApproveWorkOrder}>
+                <Text style={styles.approvalBtnText}>Approve &amp; Start Project →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.viewWoBtn} onPress={() => navigation.navigate('ClientWorkorder', { project })}>
+                <Text style={styles.viewWoBtnText}>View Work Order Details</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Category Badge */}
           <View style={styles.categoryBadge}>
             <Text style={styles.categoryBadgeText}>{assignmentType.toUpperCase()}</Text>
           </View>
@@ -175,7 +210,8 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
                 <TouchableOpacity
                   style={styles.payDoneBtn}
                   onPress={() => {
-                    if (status === 'approved') {
+                    // Spec: final_approved → balance_pending (client pays balance)
+                    if (status === 'final_approved') {
                       navigation.navigate('Payment', { project, paymentType: 'balance' });
                     }
                   }}
@@ -204,7 +240,7 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
                 {isCompleted && (
                   <TouchableOpacity
                     style={styles.rateCta}
-                    onPress={() => navigation.navigate('RatingReview', { project })}
+                    onPress={() => navigation.navigate('RateConsultant', { project })}
                   >
                     <Text style={styles.rateCtaText}>RATE YOUR EXPERIENCE</Text>
                   </TouchableOpacity>
@@ -423,6 +459,14 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.screenBg },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 100 },
+
+  approvalBanner: { marginHorizontal: spacing.xl, marginBottom: spacing.lg, backgroundColor: '#EFF6FF', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: '#BFDBFE' },
+  approvalTitle: { fontSize: fontSizes.lg, fontWeight: '700', fontFamily: fonts.heavy, color: '#1E3A5F', marginBottom: 6 },
+  approvalSubtitle: { fontSize: fontSizes.sm, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 20, marginBottom: 14 },
+  approvalBtn: { backgroundColor: '#1B3A5C', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 8 },
+  approvalBtnText: { color: '#fff', fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
+  viewWoBtn: { borderWidth: 1, borderColor: '#1B3A5C', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  viewWoBtnText: { color: '#1B3A5C', fontSize: fontSizes.base, fontWeight: '600', fontFamily: fonts.medium },
 
   // ── Header ──────────────────────────────────────────────────
   headerSection: {

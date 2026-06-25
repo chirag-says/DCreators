@@ -138,6 +138,17 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
             </View>
           </View>
 
+          {/* ── Hire Now CTA (client / buyer view only) ── */}
+          {currentRole !== 'consultant' && (
+            <TouchableOpacity
+              style={styles.hireBtn}
+              onPress={() => navigation.navigate('HireConsultant', { consultant: creator })}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.hireBtnText}>Hire Now →</Text>
+            </TouchableOpacity>
+          )}
+
         </ScrollView>
       </SafeAreaView>
     </ImageBackground>
@@ -265,5 +276,21 @@ const styles = StyleSheet.create({
     color: colors.teal,
     fontWeight: '700',
     fontStyle: 'italic',
+  },
+
+  /* ── Hire Now CTA ── */
+  hireBtn: {
+    backgroundColor: '#1B3A5C',
+    borderRadius: 14,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 24,
+  },
+  hireBtnText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+    fontFamily: fonts.heavy,
   },
 });

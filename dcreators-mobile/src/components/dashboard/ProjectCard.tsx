@@ -16,17 +16,33 @@ interface ProjectCardProps {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ComponentType<{ size: number; color: string }> }> = {
-  pending: { label: 'Pending', color: colors.warning, icon: Clock },
-  accepted: { label: 'Accepted', color: colors.success, icon: CheckCircle },
-  advance_paid: { label: 'Advance Paid', color: colors.info, icon: CheckCircle },
-  in_progress: { label: 'In Progress', color: '#8B5CF6', icon: FileText },
-  review_1: { label: 'Review 1', color: '#EC4899', icon: AlertCircle },
-  review_2: { label: 'Review 2', color: '#EC4899', icon: AlertCircle },
-  final_review: { label: 'Final Review', color: colors.error, icon: AlertCircle },
+  // Incoming assignment — consultant action required
+  draft:               { label: 'New Request',      color: '#F59E0B', icon: Clock },
+  assigned:            { label: 'New Request',      color: '#F59E0B', icon: Clock },
+  // Payment & work order stages
+  advance_pending:     { label: 'Advance Pending',  color: '#3B82F6', icon: Clock },
+  advance_paid:        { label: 'Advance Paid',     color: '#10B981', icon: CheckCircle },
+  work_order_generated:{ label: 'Work Order Sent',  color: '#6366F1', icon: FileText },
+  work_order_accepted: { label: 'WO Accepted',      color: '#10B981', icon: CheckCircle },
+  // Active work
+  in_progress:         { label: 'In Progress',      color: '#8B5CF6', icon: FileText },
+  review_1:            { label: 'Review 1',         color: '#EC4899', icon: AlertCircle },
+  review_2:            { label: 'Review 2',         color: '#EC4899', icon: AlertCircle },
+  final_review:        { label: 'Final Review',     color: '#EF4444', icon: AlertCircle },
+  final_approved:      { label: 'Final Approved',   color: '#10B981', icon: CheckCircle },
+  // Payment & completion
+  balance_pending:     { label: 'Balance Pending',  color: '#3B82F6', icon: Clock },
+  balance_paid:        { label: 'Balance Paid',     color: '#10B981', icon: CheckCircle },
+  delivered:           { label: 'Delivered',        color: '#10B981', icon: CheckCircle },
+  completed:           { label: 'Completed',        color: '#6B7280', icon: CheckCircle },
+  cancelled:           { label: 'Cancelled',        color: '#EF4444', icon: XCircle },
+  rejected:            { label: 'Rejected',         color: '#EF4444', icon: XCircle },
 };
 
+
 export default function ProjectCard({ project, onAccept, onReject, onViewWorkorder }: ProjectCardProps) {
-  const statusCfg = STATUS_CONFIG[project.status] ?? STATUS_CONFIG.pending;
+  // Fallback to 'assigned' config if status not in map (future-proofing)
+  const statusCfg = STATUS_CONFIG[project.status] ?? STATUS_CONFIG.assigned;
   const StatusIcon = statusCfg.icon;
 
   function confirmReject() {
@@ -61,8 +77,8 @@ export default function ProjectCard({ project, onAccept, onReject, onViewWorkord
         {project.deadline && <Text style={styles.deadline}>Due: {project.deadline}</Text>}
       </View>
 
-      {/* Actions */}
-      {project.status === 'pending' && (
+      {/* Actions: show Accept/Reject only on incoming 'assigned' requests */}
+      {project.status === 'assigned' && (
         <View style={styles.actions}>
           <TouchableOpacity style={styles.rejectBtn} onPress={confirmReject}>
             <XCircle size={16} color="#EF4444" />
@@ -75,7 +91,7 @@ export default function ProjectCard({ project, onAccept, onReject, onViewWorkord
         </View>
       )}
 
-      {project.status !== 'pending' && (
+      {project.status !== 'assigned' && project.status !== 'draft' && (
         <TouchableOpacity style={styles.viewOrderBtn} onPress={() => onViewWorkorder(project)}>
           <Text style={styles.viewOrderBtnText}>View Workorder →</Text>
         </TouchableOpacity>

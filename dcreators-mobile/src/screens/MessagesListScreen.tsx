@@ -38,7 +38,13 @@ export default function MessagesListScreen({ navigation }: any) {
       let query = supabase
         .from('projects')
         .select('id, assignment_type, status, client_id, consultant_id, consultant_profiles(display_name, code, category, avatar_url)')
-        .in('status', ['accepted', 'advance_paid', 'in_progress', 'review_1', 'review_2', 'final_review', 'approved', 'completed']);
+        .in('status', [
+          'advance_pending', 'advance_paid',
+          'work_order_generated', 'work_order_accepted',
+          'in_progress', 'review_1', 'review_2', 'final_review',
+          'final_approved', 'balance_pending', 'balance_paid',
+          'delivered', 'completed',
+        ]);
 
       if (currentRole === 'consultant' && consultantProfile?.id) {
         query = query.eq('consultant_id', consultantProfile.id);
