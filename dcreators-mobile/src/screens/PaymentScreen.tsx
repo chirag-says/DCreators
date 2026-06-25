@@ -11,6 +11,7 @@ import {
 } from 'lucide-react-native';
 import TopHeader from '../components/TopHeader';
 import { supabase } from '../lib/supabase';
+import { updateProjectStatus } from '../services/projectService';
 import { createCashfreeOrder, verifyPaymentStatus } from '../lib/cashfree';
 import { sendNotification } from '../lib/notifications';
 import { useAuthStore } from '../store/useAuthStore';
@@ -56,9 +57,14 @@ export default function PaymentScreen({ navigation, route }: any) {
       return;
     }
 
+    // For balance payment: transition final_approved → balance_pending before opening gateway
+    if (paymentType === 'balance' && project?.id) {
+      try { await updateProjectStatus(project.id, 'balance_pending'); }
+      catch (err: any) { Alert.alert('Error', err.message); return; }
+    }
+
     setIsPaying(true);
     try {
-      // 1. Create order via Edge Function
       const order = await createCashfreeOrder({
         projectId: project?.id,
         amount: payAmount,
@@ -69,13 +75,10 @@ export default function PaymentScreen({ navigation, route }: any) {
       });
 
       setCurrentOrderId(order.order_id);
-
-      // 2. Build the Cashfree checkout URL
       const env = order.environment === 'PROD' ? 'production' : 'sandbox';
       const checkoutPage = buildCheckoutHtml(order.payment_session_id, env);
       setCheckoutUrl(checkoutPage);
       setShowWebView(true);
-
     } catch (err: any) {
       Alert.alert('Payment Error', err.message || 'Could not create payment order. Please try again.');
     } finally {
@@ -157,27 +160,23 @@ export default function PaymentScreen({ navigation, route }: any) {
       if (result.status === 'completed') {
         setTxnId(result.cashfreePaymentId || currentOrderId);
 
-        // ── Spec state transition post-payment ────────────────────
         if (project?.id) {
+          // advance path: advance_pending → advance_paid
+          // balance path: balance_pending → balance_paid (balance_pending was set in handlePayPress)
           const newStatus = paymentType === 'advance' ? 'advance_paid' : 'balance_paid';
-          await supabase.from('projects').update({
-            status: newStatus,
-            updated_at: new Date().toISOString(),
-          }).eq('id', project.id);
+          await updateProjectStatus(project.id, newStatus);
 
-          // Notify consultant
           if (project.consultant_id) {
             sendNotification({
               userId: project.consultant_id,
               title: paymentType === 'advance' ? 'Advance Payment Received' : 'Balance Payment Received',
               message: paymentType === 'advance'
                 ? `Client paid the advance of ₹${payAmount.toLocaleString('en-IN')}. Please generate the Work Order.`
-                : `Client paid the balance of ₹${payAmount.toLocaleString('en-IN')}. Project is complete!`,
+                : `Client paid the balance of ₹${payAmount.toLocaleString('en-IN')}. Deliver the final files!`,
               type: 'payment',
             });
           }
         }
-        // ─────────────────────────────────────────────
 
         setIsPaid(true);
       } else if (result.status === 'failed') {
@@ -246,38 +245,35 @@ export default function PaymentScreen({ navigation, route }: any) {
                   <TouchableOpacity
                     style={styles.doneBtn}
                     onPress={() => {
-                      // HireConsultant payments → PaymentConfirmed success screen
-                      // Regular project advance → GenerateWorkOrder flow
-                      if (project?.assignment_type) {
-                        navigation.replace('PaymentConfirmed', {
-                          transactionId: txnId || `DC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-                          amountPaid: payAmount,
-                          paidAt: new Date().toISOString(),
-                          projectId: project?.id,
-                        });
-                      } else {
-                        navigation.replace('GenerateWorkOrder', { project, txnId, payAmount });
-                      }
+                      navigation.replace('PaymentConfirmed', {
+                        transactionId: txnId || `DC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+                        amountPaid: payAmount,
+                        paidAt: new Date().toISOString(),
+                        projectId: project?.id,
+                        paymentType: 'advance',
+                        project,
+                      });
                     }}
                   >
-                    <Text style={styles.doneBtnText}>{project?.assignment_type ? 'View Confirmation →' : 'Generate Work Order →'}</Text>
+                    <Text style={styles.doneBtnText}>View Confirmation →</Text>
                   </TouchableOpacity>
                 ) : (
-                  <>
-                    <TouchableOpacity
-                      style={[styles.doneBtn, { backgroundColor: '#EAB308' }]}
-                      onPress={() => navigation.replace('RateConsultant', { project })}
-                    >
-                      <Text style={styles.doneBtnText}>⭐ Rate & Review</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.doneBtn, { marginTop: 10 }]}
-                      onPress={() => navigation.navigate('Main')}
-                    >
-                      <Text style={styles.doneBtnText}>Back to Dashboard</Text>
-                    </TouchableOpacity>
-                  </>
+                  // balance: PaymentConfirmedScreen fires balance_paid→delivered then shows Rate CTA
+                  <TouchableOpacity
+                    style={styles.doneBtn}
+                    onPress={() => navigation.replace('PaymentConfirmed', {
+                      transactionId: txnId || `DC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+                      amountPaid: payAmount,
+                      paidAt: new Date().toISOString(),
+                      projectId: project?.id,
+                      paymentType: 'balance',
+                      project,
+                    })}
+                  >
+                    <Text style={styles.doneBtnText}>View Confirmation →</Text>
+                  </TouchableOpacity>
                 )}
+
               </Animated.View>
             ) : verifying ? (
               <View style={styles.verifyingCard}>
@@ -292,8 +288,15 @@ export default function PaymentScreen({ navigation, route }: any) {
                 {/* Cost Breakdown */}
                 <View style={styles.card}>
                   <Text style={styles.cardTitle}>Payment Summary</Text>
+                  {/* Project title row */}
                   <View style={styles.costRow}>
-                    <Text style={styles.costLabel}>Project Budget</Text>
+                    <Text style={styles.costLabel}>Project</Text>
+                    <Text style={[styles.costValue, { maxWidth: '60%' }]} numberOfLines={1}>
+                      {project?.assignment_details?.[0] || project?.assignment_type || 'Creative Service'}
+                    </Text>
+                  </View>
+                  <View style={styles.costRow}>
+                    <Text style={styles.costLabel}>Total Project Fee</Text>
                     <Text style={styles.costValue}>₹{Number(totalCost).toLocaleString()}</Text>
                   </View>
                   <View style={styles.costRow}>

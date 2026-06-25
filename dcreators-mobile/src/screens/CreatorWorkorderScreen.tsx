@@ -99,11 +99,12 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
   const round2 = submissions.find(s => s.round === 'review_2');
   const roundFinal = submissions.find(s => s.round === 'final');
 
-  // Determine which round the consultant should upload next
+  // Which round slot is next for the consultant to fill?
+  // After a revert the status returns to in_progress; re-upload always uses review_1 internally.
   const nextUploadRound: 'review_1' | 'review_2' | 'final' | null = (() => {
-    if (!round1) return 'review_1';
-    if (round1.client_action === 'revert' && !round2) return 'review_2';
-    if (round2?.client_action === 'revert' && !roundFinal) return 'final';
+    if (!round1 || status === 'work_order_accepted' || status === 'in_progress') return 'review_1';
+    if (status === 'review_2') return 'review_2';  // client approved R1, waiting for R2 upload
+    if (status === 'final_review') return 'final'; // client approved R2, waiting for final upload
     return null;
   })();
 
@@ -138,6 +139,11 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
   async function handleSubmitDesign() {
     if (!project?.id || !uploadRound) return;
     if (uploadFiles.length === 0) { Alert.alert('No files', 'Add at least one design image.'); return; }
+    // Enforce max 3 rounds
+    const roundCount = submissions.filter(s => s.round !== undefined).length;
+    if (roundCount >= 3 && !submissions.find(s => s.round === uploadRound)) {
+      Alert.alert('Max Rounds', 'Maximum 3 design rounds allowed.'); return;
+    }
     setIsUploading(true);
     try {
       const urls = await Promise.all(uploadFiles.map(uri => uploadToCloud(uri)));
@@ -149,11 +155,14 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
       });
       if (error) { Alert.alert('Error', error.message); setIsUploading(false); return; }
 
-      // Map upload round to the status machine's next status
-      const statusMap: Record<string, string> = { review_1: 'review_1', review_2: 'review_2', final: 'final_review' };
-      const nextStatus = statusMap[uploadRound] as any;
-      const progress = uploadRound === 'review_1' ? 33 : uploadRound === 'review_2' ? 66 : 90;
-      await updateProjectStatus(project.id, nextStatus, { progress_percent: progress });
+      // From in_progress only review_1 is valid in the machine.
+      // When status is review_2/final_review the status is already set; no transition needed.
+      const currentStatus = project.status ?? status;
+      if (currentStatus === 'in_progress' || currentStatus === 'work_order_accepted') {
+        const progress = uploadRound === 'review_1' ? 33 : 66;
+        await updateProjectStatus(project.id, 'review_1', { progress_percent: progress });
+      }
+      // If status is review_2 or final_review, client already advanced it; no-op on status.
 
       if (project.client_id) {
         sendNotification({

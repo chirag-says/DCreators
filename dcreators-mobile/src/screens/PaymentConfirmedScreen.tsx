@@ -7,15 +7,16 @@
  * — Confirmation copy + support link
  * — "View Project Dashboard" CTA
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Animated, Easing, Image,
+  Animated, Easing, Image, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle, Bell, Info } from 'lucide-react-native';
+import { CheckCircle, Bell, Info, Download, Star } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes } from '../styles/theme';
+import { updateProjectStatus } from '../services/projectService';
 
 const NAVY   = '#1B3A5C';
 const TEAL   = '#3D9B8F';
@@ -29,6 +30,8 @@ interface Props {
       amountPaid?: number;
       paidAt?: string;
       projectId?: string;
+      paymentType?: 'advance' | 'balance';
+      project?: any;
     };
   };
 }
@@ -38,26 +41,26 @@ export default function PaymentConfirmedScreen({ navigation, route }: Props) {
   const transactionId = route?.params?.transactionId ?? 'DC-77XC-901';
   const amountPaid    = route?.params?.amountPaid ?? 1300;
   const paidAt        = route?.params?.paidAt ?? new Date().toISOString();
+  const projectId     = route?.params?.projectId;
+  const paymentType   = route?.params?.paymentType ?? 'advance';
+  const project       = route?.params?.project;
+  const [delivered, setDelivered] = useState(false);
 
   const scaleAnim  = useRef(new Animated.Value(0)).current;
   const opacityAnim= useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Entrance animation — checkmark pops in, content fades up
     Animated.sequence([
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 100,
-        friction: 6,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: 1,
-        duration: 400,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
+      Animated.spring(scaleAnim, { toValue: 1, tension: 100, friction: 6, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 1, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
+
+    // balance_paid → delivered: final files now accessible
+    if (paymentType === 'balance' && projectId) {
+      updateProjectStatus(projectId, 'delivered')
+        .then(() => setDelivered(true))
+        .catch((e) => console.log('[PaymentConfirmed] delivered transition:', e.message));
+    }
   }, []);
 
   const formattedDate = new Date(paidAt).toLocaleDateString('en-IN', {
@@ -138,13 +141,34 @@ export default function PaymentConfirmedScreen({ navigation, route }: Props) {
           </View>
 
           {/* CTA */}
-          <TouchableOpacity
-            style={s.dashboardBtn}
-            onPress={() => navigation.navigate('Dashboard')}
-            activeOpacity={0.85}
-          >
-            <Text style={s.dashboardBtnText}>View Project Dashboard</Text>
-          </TouchableOpacity>
+          {paymentType === 'balance' ? (
+            <>
+              {/* Download gating: enabled only after balance_paid→delivered */}
+              <TouchableOpacity
+                style={[s.dashboardBtn, !delivered && { opacity: 0.5 }]}
+                disabled={!delivered}
+                onPress={() => navigation.navigate('RateConsultant', { project })}
+                activeOpacity={0.85}
+              >
+                <Text style={s.dashboardBtnText}>⭐ Rate Your Experience</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.dashboardBtn, { marginTop: 10, backgroundColor: '#0D7F7A' }]}
+                onPress={() => navigation.navigate('Main', { screen: 'Dashboard' })}
+                activeOpacity={0.85}
+              >
+                <Text style={s.dashboardBtnText}>Back to Dashboard</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={s.dashboardBtn}
+              onPress={() => navigation.navigate('Dashboard')}
+              activeOpacity={0.85}
+            >
+              <Text style={s.dashboardBtnText}>View Project Dashboard</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </View>
     </SafeAreaView>

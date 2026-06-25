@@ -1,11 +1,11 @@
 /**
  * CLIENT_REVIEW_CONSULTANT_SCREEN  (Phase 3.8)
  * owner_role: CLIENT
- * previous: PaymentScreen (balance_paid) | ClientWorkorderScreen (completed)
+ * previous: PaymentConfirmedScreen (delivered)
  * next: ClientDashboard
- * workflow: balance_paid → completed
+ * workflow: delivered → completed
  *
- * Figma: CLIENT_REVIEW_CONSULTANT_SCREEN.png
+ * Figma: Client Review.png ("Rate Your Experience")
  */
 import React, { useState } from 'react';
 import {
@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Zap, MessageSquare, Gem, Star } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
+import { updateProjectStatus } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 
@@ -65,11 +66,8 @@ export default function RateConsultantScreen({ navigation, route }: any) {
         created_at:          new Date().toISOString(),
       });
 
-      // Mark project completed
-      await supabase.from('projects').update({
-        status:     'completed',
-        updated_at: new Date().toISOString(),
-      }).eq('id', project.id);
+      // delivered → completed via the status machine
+      await updateProjectStatus(project.id, 'completed');
 
       // Notify consultant
       if (project.consultant_id) {
