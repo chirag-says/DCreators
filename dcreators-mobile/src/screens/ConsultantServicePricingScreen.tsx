@@ -77,8 +77,26 @@ const SERVICE_ITEMS: Record<Category, string[]> = {
   ],
 };
 
-export default function ConsultantServicePricingScreen({ navigation }: any) {
+const CATEGORY_DB_VALUE: Record<Category, string> = {
+  Designer: 'designer',
+  Photographer: 'photographer',
+  Sculptor: 'sculptor',
+  Artisan: 'artisan',
+};
+
+// Headline used to seed `expertise` — keep the keywords ('photo', 'design',
+// 'art', 'craft') that ExploreConsultantsScreen/SearchScreen match against.
+const CATEGORY_HEADLINE: Record<Category, string> = {
+  Designer: 'Design',
+  Photographer: 'Photography',
+  Sculptor: 'Sculpture & Art',
+  Artisan: 'Traditional Craft',
+};
+
+export default function ConsultantServicePricingScreen({ navigation, route }: any) {
+  const fromOnboarding = route?.params?.fromOnboarding === true;
   const consultantProfile = useAuthStore(s => s.consultantProfile);
+  const fetchConsultantProfile = useAuthStore(s => s.fetchConsultantProfile);
 
   const [category,   setCategory]   = useState<Category>('Designer');
   const [showCatDD,  setShowCatDD]  = useState(false);
@@ -88,6 +106,14 @@ export default function ConsultantServicePricingScreen({ navigation }: any) {
   const [mode,       setMode]       = useState<'view' | 'edit'>('edit');
 
   const services = SERVICE_ITEMS[category];
+
+  // Resume with the consultant's already-chosen category, if any.
+  useEffect(() => {
+    if (consultantProfile?.category) {
+      const match = CATEGORIES.find(c => CATEGORY_DB_VALUE[c] === consultantProfile.category);
+      if (match) setCategory(match);
+    }
+  }, [consultantProfile?.category]);
 
   useEffect(() => { fetchPricing(); }, [category]);
 
@@ -127,9 +153,27 @@ export default function ConsultantServicePricingScreen({ navigation }: any) {
         .from('consultant_service_pricing')
         .upsert(upserts, { onConflict: 'consultant_id,category,service_name' });
       if (error) throw error;
+
+      // The chosen category, a base price, and a searchable expertise/subtitle
+      // string live on consultant_profiles itself — Explore/Search/CreatorProfile
+      // read those columns directly rather than consultant_service_pricing.
+      const pricedServices = services.filter(svc => Number(prices[svc] ?? 0) > 0);
+      const basePrice = pricedServices.length ? Number(prices[pricedServices[0]]) : null;
+      const expertise = [CATEGORY_HEADLINE[category], ...pricedServices.slice(0, 4)].join(', ');
+      const subtitle = `${category} Consultant`;
+      await supabase
+        .from('consultant_profiles')
+        .update({ category: CATEGORY_DB_VALUE[category], base_price: basePrice, expertise, subtitle })
+        .eq('id', consultantProfile.id);
+      await fetchConsultantProfile();
+
       if (submit) {
-        Alert.alert('Submitted ✅', 'Your consultancy fees have been submitted for review.');
-        setMode('view');
+        if (fromOnboarding) {
+          navigation.navigate('ConsultantPortfolioUpdate', { fromOnboarding: true });
+        } else {
+          Alert.alert('Submitted ✅', 'Your consultancy fees have been submitted for review.');
+          setMode('view');
+        }
       } else {
         Alert.alert('Saved', 'Your fees have been saved as draft.');
       }
@@ -153,7 +197,12 @@ export default function ConsultantServicePricingScreen({ navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={s.heroTitle}>Update{'\n'}Consultancy{'\n'}Services</Text>
+        <Text style={s.heroTitle}>{fromOnboarding ? 'Set Up\nConsultancy\nServices' : 'Update\nConsultancy\nServices'}</Text>
+        {fromOnboarding ? (
+          <Text style={s.stepHint}>Step 2 of 3 — choose your category and set your fees.</Text>
+        ) : (
+          <View style={{ marginBottom: 14 }} />
+        )}
 
         {/* Experience blurb */}
         <Text style={s.sectionLabel}>CREATIVE EXPERIENCE —</Text>
@@ -228,7 +277,7 @@ export default function ConsultantServicePricingScreen({ navigation }: any) {
         >
           {saving
             ? <ActivityIndicator color="#fff" size="small" />
-            : <><Send size={16} color="#fff" /><Text style={s.submitBtnText}>Submit</Text></>
+            : <><Send size={16} color="#fff" /><Text style={s.submitBtnText}>{fromOnboarding ? 'Next' : 'Submit'}</Text></>
           }
         </TouchableOpacity>
 
@@ -274,7 +323,8 @@ const s = StyleSheet.create({
   tagline: { fontSize: 9, fontFamily: fonts.body, color: colors.textTertiary, letterSpacing: 0.5 },
   iconBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 20, paddingBottom: 60 },
-  heroTitle: { fontSize: 38, fontWeight: '900', fontFamily: fonts.heavy, color: NAVY, lineHeight: 42, marginTop: 12, marginBottom: 22 },
+  heroTitle: { fontSize: 38, fontWeight: '900', fontFamily: fonts.heavy, color: NAVY, lineHeight: 42, marginTop: 12, marginBottom: 8 },
+  stepHint: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 20, marginBottom: 18 },
   sectionLabel: { fontSize: 10, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textTertiary, letterSpacing: 0.8, marginBottom: 10 },
   // Experience
   expCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#F8F9FB', borderRadius: 12, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#E5E7EB' },

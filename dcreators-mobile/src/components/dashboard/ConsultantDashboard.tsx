@@ -1,32 +1,26 @@
 // ============================================
-// ConsultantDashboard — Sales Dashboard sub-screen
+// ConsultantDashboard — Sales Dashboard purchase-requests section
 // Role: CONSULTANT | Product: B (Artwork Marketplace)
-// Figma: "Sales Dashboard.png"
 // Reads: artwork_orders (NOT projects table)
+// Rendered inline inside CreatorDashboardScreen's Sales Dashboard tab
+// (no own header/background — that's handled by the parent screen)
 // ============================================
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  FlatList,
   StyleSheet,
-  ImageBackground,
   ActivityIndicator,
   Alert,
-  RefreshControl,
   TouchableOpacity,
   Image,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import TopHeader from '../TopHeader';
-import { FileText, Truck, CreditCard, CheckSquare, TrendingUp, IndianRupee } from 'lucide-react-native';
+import { FileText, Truck, CreditCard, CheckSquare } from 'lucide-react-native';
 import { useAuthStore } from '../../store/useAuthStore';
 import { supabase } from '../../lib/supabase';
-import { fetchConsultantEarnings } from '../../services/projectService';
 import { colors, fonts, fontSizes, spacing, radii } from '../../styles/theme';
-import { RemoteAssets } from '../../lib/assets';
 import type { ArtworkOrder } from '../../types';
 import type { MainTabScreenProps } from '../../types/navigation';
 
@@ -45,9 +39,7 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
 
   const [orders, setOrders] = useState<ArtworkOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [agreedOrders, setAgreedOrders] = useState<Set<string>>(new Set());
-  const [earnings, setEarnings] = useState({ total: 0, pending: 0, thisMonth: 0 });
 
   const artistId = consultantProfile?.user_id ?? profile?.id;
 
@@ -72,23 +64,15 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
       setOrders([]);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }
 
   useEffect(() => { fetchOrders(); }, [artistId]);
 
   useEffect(() => {
-    if (!artistId) return;
-    fetchConsultantEarnings(artistId)
-      .then(setEarnings)
-      .catch((e) => console.warn('[ConsultantDashboard] earnings error:', e));
-  }, [artistId]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchOrders();
-  }, [artistId]);
+    const unsub = (navigation as any)?.addListener?.('focus', fetchOrders);
+    return unsub;
+  }, [navigation, artistId]);
 
   function toggleTerms(orderId: string) {
     setAgreedOrders((prev) => {
@@ -138,12 +122,6 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
         },
       },
     ]);
-  }
-
-  function formatAmount(amount: number): string {
-    if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`;
-    if (amount >= 1000) return `₹${(amount / 1000).toFixed(0)}K`;
-    return `₹${amount.toLocaleString('en-IN')}`;
   }
 
   function formatCurrency(amount: number) {
@@ -215,6 +193,9 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
             <Text style={styles.buyerTag}>Verified Collector since 2021</Text>
           </View>
         </View>
+        {!!(item as any).buyer_message && (
+          <Text style={styles.buyerQuote}>"{(item as any).buyer_message}"</Text>
+        )}
 
         <TouchableOpacity
           style={styles.termsRow}
@@ -250,146 +231,81 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
     );
   }
 
-  type SectionItem =
-    | { type: 'header' }
-    | { type: 'pending'; order: ArtworkOrder }
-    | { type: 'empty' };
-
-  const sections: SectionItem[] = [];
-  sections.push({ type: 'header' });
-
-  if (loading) {
-    // loading handled outside FlatList
-  } else if (orders.length === 0) {
-    sections.push({ type: 'empty' });
-  } else {
-    orders.forEach((o) => sections.push({ type: 'pending', order: o }));
-  }
-
+  // Pure content — no own header/background. Rendered inline by
+  // CreatorDashboardScreen inside the shared Sales Dashboard tab.
   return (
-    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <TopHeader />
-        {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        ) : (
-          <FlatList
-            data={sections}
-            keyExtractor={(_, i) => String(i)}
-            renderItem={({ item: section }) => {
-              if (section.type === 'header') {
-                return (
-                  <View style={styles.headerSection}>
-                    <Text style={styles.dashboardTitle}>{'Sales\nDashboard'}</Text>
-                    <Text style={styles.dashboardSubtitle}>
-                      Manage your creative transactions, pending artwork requests, and fulfillment status for your global collectors.
-                    </Text>
+    <View>
+      <Text style={styles.sectionTitle}>Purchase Requests</Text>
+      <Text style={styles.dashboardSubtitle}>
+        Manage incoming artwork purchase requests and fulfillment status for your collectors.
+      </Text>
 
-                    {/* Utility navigation tiles */}
-                    <View style={styles.quickGrid}>
-                      <TouchableOpacity
-                        style={styles.quickBtn}
-                        onPress={() => (navigation as any).navigate('ConsultantEarningsHistory')}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.quickLabel}>{'Sales\nHistory'}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.quickBtn}
-                        onPress={() => (navigation as any).navigate('ConsultantProjectManagement')}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.quickLabel}>{'Manage\nProjects'}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.quickBtn}
-                        onPress={() => (navigation as any).navigate('ConsultantPortfolioUpdate')}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.quickLabel}>{'Update\nPortfolio'}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.quickBtn}
-                        onPress={() => (navigation as any).navigate('ConsultantServicePricing')}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.quickLabel}>{'Service\nPricing'}</Text>
-                      </TouchableOpacity>
-                    </View>
+      {/* Utility navigation tiles */}
+      <View style={styles.quickGrid}>
+        <TouchableOpacity
+          style={styles.quickBtn}
+          onPress={() => (navigation as any).navigate('ConsultantEarningsHistory')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.quickLabel}>{'Sales\nHistory'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.quickBtn}
+          onPress={() => (navigation as any).navigate('ConsultantProjectManagement')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.quickLabel}>{'Manage\nProjects'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.quickBtn}
+          onPress={() => (navigation as any).navigate('ConsultantPortfolioUpdate')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.quickLabel}>{'Update\nPortfolio'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.quickBtn}
+          onPress={() => (navigation as any).navigate('ConsultantServicePricing')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.quickLabel}>{'Service\nPricing'}</Text>
+        </TouchableOpacity>
+      </View>
 
-                    <View style={styles.earningsCard}>
-                      <Text style={styles.earningsLabel}>TOTAL EARNED</Text>
-                      <Text style={styles.earningsAmount}>{formatAmount(earnings.total)}</Text>
-                      <View style={styles.earningsRow}>
-                        <View style={styles.earningsItem}>
-                          <TrendingUp size={14} color="#7DD3C0" />
-                          <Text style={styles.earningsItemLabel}>This Month</Text>
-                          <Text style={styles.earningsItemValue}>{formatAmount(earnings.thisMonth)}</Text>
-                        </View>
-                        <View style={styles.earningsDivider} />
-                        <View style={styles.earningsItem}>
-                          <IndianRupee size={14} color="#FBD38D" />
-                          <Text style={styles.earningsItemLabel}>Pending</Text>
-                          <Text style={[styles.earningsItemValue, { color: '#FBD38D' }]}>{formatAmount(earnings.pending)}</Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                );
-              }
-
-              if (section.type === 'pending') return renderPendingCard({ item: section.order });
-
-              if (section.type === 'empty') {
-                return (
-                  <View style={styles.emptyState}>
-                    <FileText size={48} color="#D1D5DB" />
-                    <Text style={styles.emptyTitle}>No purchase requests yet</Text>
-                    <Text style={styles.emptySubtitle}>
-                      Incoming artwork purchase requests will appear here
-                    </Text>
-                  </View>
-                );
-              }
-
-              return null;
-            }}
-            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-            }
-          />
-        )}
-      </SafeAreaView>
-    </ImageBackground>
+      {loading ? (
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
+      ) : orders.length === 0 ? (
+        <View style={styles.emptyState}>
+          <FileText size={40} color="#D1D5DB" />
+          <Text style={styles.emptyTitle}>No purchase requests yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Incoming artwork purchase requests will appear here
+          </Text>
+        </View>
+      ) : (
+        orders.map((order) => (
+          <View key={order.id}>{renderPendingCard({ item: order })}</View>
+        ))
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: colors.screenBg },
-  safe: { flex: 1 },
-
-  headerSection: { paddingTop: 16, marginBottom: 8 },
-  dashboardTitle: {
-    fontSize: 36,
+  sectionTitle: {
+    fontSize: fontSizes.lg,
     fontWeight: '800',
     fontFamily: fonts.heavy,
-    color: ORANGE_TITLE,
-    lineHeight: 42,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
+    color: NAVY,
+    marginBottom: 4,
   },
   dashboardSubtitle: {
     fontSize: fontSizes.sm,
     fontFamily: fonts.body,
     color: colors.textSecondary,
-    textAlign: 'center',
+    textAlign: 'left',
     lineHeight: 20,
     marginBottom: spacing.lg,
-    paddingHorizontal: 8,
   },
 
   quickGrid: {
@@ -550,6 +466,10 @@ const styles = StyleSheet.create({
   buyerInitial: { fontSize: 18, fontWeight: '800', color: '#fff', fontFamily: fonts.heavy },
   buyerName: { fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy, color: NAVY },
   buyerTag: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textSecondary },
+  buyerQuote: {
+    fontSize: fontSizes.sm + 1, fontFamily: fonts.body, fontStyle: 'italic',
+    color: colors.textSecondary, lineHeight: 20, marginBottom: 12,
+  },
 
   termsRow: {
     flexDirection: 'row',
@@ -602,26 +522,4 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#9CA3AF' },
   emptySubtitle: { fontSize: 13, fontFamily: fonts.body, color: '#D1D5DB', textAlign: 'center' },
-
-  earningsCard: {
-    backgroundColor: '#1A2C4E',
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    marginBottom: spacing.xl,
-  },
-  earningsLabel: {
-    fontSize: fontSizes.xs + 1, fontWeight: '700', fontFamily: fonts.heavy,
-    color: '#9CA3AF', letterSpacing: 1, marginBottom: spacing.sm,
-  },
-  earningsAmount: {
-    fontSize: 38, fontWeight: '800', fontFamily: fonts.heavy,
-    color: '#FFFFFF', marginBottom: spacing.lg,
-  },
-  earningsRow: { flexDirection: 'row', alignItems: 'center' },
-  earningsItem: { flex: 1, alignItems: 'center', gap: 4 },
-  earningsDivider: {
-    width: 1, height: 40, backgroundColor: 'rgba(255,255,255,0.15)', marginHorizontal: spacing.md,
-  },
-  earningsItemLabel: { fontSize: fontSizes.xs, fontFamily: fonts.body, color: '#9CA3AF' },
-  earningsItemValue: { fontSize: fontSizes.lg, fontWeight: '700', fontFamily: fonts.heavy, color: '#7DD3C0' },
 });

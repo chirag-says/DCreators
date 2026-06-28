@@ -21,6 +21,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import type { Project } from '../types';
+import FigmaBottomBar from '../components/FigmaBottomBar';
 
 const NAVY   = '#1B3A5C';
 const TEAL   = '#3D9B8F';
@@ -308,6 +309,7 @@ export default function ConsultantProjectManagementScreen({ navigation }: any) {
         </View>
 
       </ScrollView>
+      <FigmaBottomBar navigation={navigation} activeTab="sales" />
     </SafeAreaView>
   );
 }

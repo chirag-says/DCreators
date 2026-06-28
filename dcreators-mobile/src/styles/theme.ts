@@ -4,41 +4,45 @@
  * Centralized design tokens extracted from the Figma design file.
  * All screens should import from this file to maintain visual consistency.
  *
- * Key design principles from Figma:
- * - Light blue-gray background (#EDF1F5 / #E8ECF0)
- * - Deep indigo primary (#4338CA)
- * - Teal accent (#3D9B8F / #2D8B7F)
- * - White/off-white input fields with soft rounded corners
- * - Indigo-filled CTA buttons with generous padding
- * - Clean, minimal header with hamburger + D icon
+ * Key design principles from Figma (canonical source: claudereferfigma/):
+ * - Light lavender / off-white screen background (#F4F4F8 → #EDF1F5)
+ * - Navy primary (#1B3A5C) with deep-indigo titles (#21317A)
+ * - Orange accent (#E8854A) — Sales Dashboard title, highlights, badges
+ * - Teal accent (#3D9B8F) — "Submit for review" CTAs
+ * - White cards (radius ~16, soft shadow); off-white inputs (radius ~12, 1px border)
+ * - Primary button: navy fill, pill/rounded, white text. Secondary: navy outline.
  */
 
 import { Platform } from 'react-native';
 
 // ─── Color Palette ───────────────────────────────────────────
 export const colors = {
-  // Primary brand colors (from Figma A/B series)
-  primary: '#4338CA',        // Deep indigo — buttons, icons, accents
-  primaryDark: '#3730A3',    // Hover/pressed state
-  primaryLight: '#6366F1',   // Lighter variant
+  // Primary brand colors (canonical navy, from claudereferfigma)
+  primary: '#1B3A5C',        // Navy — buttons, icons, accents, most titles
+  primaryDark: '#13293F',    // Hover/pressed state
+  primaryLight: '#2C5278',   // Lighter variant
+  indigo: '#21317A',         // Deep indigo — some screen titles
 
   // Secondary / Accent
-  teal: '#3D9B8F',           // Teal — consultant cards, secondary CTAs
+  teal: '#3D9B8F',           // Teal — "Submit for review" CTAs
   tealDark: '#2D8B7F',       // Darker teal for borders
-  orange: '#E8854A',         // Orange accent — client icon, highlights
+  orange: '#E8854A',         // Orange accent — Sales Dashboard, highlights, badges
+  orangeDark: '#E87B35',     // Pressed/darker orange
 
   // Backgrounds
-  screenBg: '#EDF1F5',       // Figma screen background (light blue-gray)
+  screenBg: '#F4F4F8',       // Figma screen background (light lavender/off-white)
+  screenBgAlt: '#EDF1F5',    // Alternate cooler background
   cardBg: '#FFFFFF',         // Card backgrounds
   inputBg: '#F5F5F5',        // Input field backgrounds (off-white)
   sectionBg: '#F8F9FB',      // Section/panel backgrounds
 
   // Text hierarchy
-  textPrimary: '#1F2937',    // Headings, primary text
+  textPrimary: '#1B3A5C',    // Headings, primary text (navy)
+  textBody: '#1F2937',       // Dark neutral body text
   textSecondary: '#6B7280',  // Descriptions, subtitles
   textTertiary: '#9CA3AF',   // Placeholders, meta text
   textOnPrimary: '#FFFFFF',  // Text on primary buttons
-  textLink: '#4338CA',       // Links (matches primary)
+  textLink: '#1B3A5C',       // Links (matches navy primary)
 
   // Borders & Dividers
   border: '#E5E7EB',         // Default border
@@ -62,11 +66,11 @@ export const colors = {
   sectionBrown: '#4E3F30',
 
   // Figma button variants
-  btnPrimary: '#4338CA',
+  btnPrimary: '#1B3A5C',
   btnPrimaryText: '#FFFFFF',
   btnOutline: 'transparent',
-  btnOutlineText: '#4338CA',
-  btnOutlineBorder: '#4338CA',
+  btnOutlineText: '#1B3A5C',
+  btnOutlineBorder: '#1B3A5C',
   btnDisabled: '#9CA3AF',
   btnDanger: '#EF4444',
   btnSuccess: '#10B981',

@@ -16,12 +16,13 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, Upload, X, Save, Edit3, Send } from 'lucide-react-native';
+import { ArrowLeft, Bell, Upload, X, Save, Edit3, Send, ChevronDown } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import { uploadToCloudinary } from '../lib/cloudinary';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing } from '../styles/theme';
+import ImageCropModal, { CropVariants } from '../components/ImageCropModal';
 
 const NAVY   = '#1B3A5C';
 const ORANGE = '#E87B35';
@@ -29,45 +30,68 @@ const TEAL   = '#3D9B8F';
 const BG     = '#F7F8FA';
 const MAX_SLOTS = 5;
 
+type SizeUnit = 'in' | 'cm';
+const SIZE_UNITS: { key: SizeUnit; label: string }[] = [
+  { key: 'in', label: 'inches' },
+  { key: 'cm', label: 'cm' },
+];
+
 interface ArtworkSlot {
   id?: string;
-  localUri?: string;
-  cloudUrl?: string;
+  localCrops?: CropVariants;
+  cloudCrops?: CropVariants;
   title: string;
-  size: string;
+  length: string;
+  breadth: string;
+  sizeUnit: SizeUnit;
   medium: string;
   price: string;
   availableForSale: boolean;
-  brief: string;
+  description: string;
   uploaded: boolean;
   submitting: boolean;
 }
 
 function emptySlot(): ArtworkSlot {
-  return { title: '', size: '', medium: '', price: '', availableForSale: true, brief: '', uploaded: false, submitting: false };
+  return { title: '', length: '', breadth: '', sizeUnit: 'in', medium: '', price: '', availableForSale: true, description: '', uploaded: false, submitting: false };
 }
 
-export default function ConsultantPortfolioUpdateScreen({ navigation }: any) {
+function formatSize(slot: ArtworkSlot): string | null {
+  if (!slot.length.trim() || !slot.breadth.trim()) return null;
+  const unitLabel = SIZE_UNITS.find(u => u.key === slot.sizeUnit)?.label ?? 'inches';
+  return `${slot.length.trim()} × ${slot.breadth.trim()} ${unitLabel}`;
+}
+
+export default function ConsultantPortfolioUpdateScreen({ navigation, route }: any) {
+  const fromOnboarding = route?.params?.fromOnboarding === true;
   const consultantProfile = useAuthStore(s => s.consultantProfile);
   const profile           = useAuthStore(s => s.profile);
+  const fetchConsultantProfile = useAuthStore(s => s.fetchConsultantProfile);
 
   const [slots,   setSlots]   = useState<ArtworkSlot[]>([emptySlot()]);
   const [existing,setExisting]= useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode,    setMode]    = useState<'edit' | 'view'>('edit');
 
+  // Raw picked photo awaiting a crop decision before it's attached to a slot.
+  const [cropSourceUri, setCropSourceUri] = useState<string | null>(null);
+  const [cropTargetIdx, setCropTargetIdx] = useState<number | null>(null);
+
+  // Which slot's size-unit dropdown is currently open (only one at a time).
+  const [openUnitDropdownIdx, setOpenUnitDropdownIdx] = useState<number | null>(null);
+
   const activeSlotIdx = slots.length - 1;
 
   useEffect(() => { fetchExisting(); }, []);
 
   async function fetchExisting() {
-    if (!consultantProfile?.user_id) { setLoading(false); return; }
+    if (!consultantProfile?.id) { setLoading(false); return; }
     setLoading(true);
     try {
       const { data } = await supabase
         .from('shop_products')
         .select('*')
-        .eq('consultant_id', consultantProfile.user_id)
+        .eq('consultant_id', consultantProfile.id)
         .order('created_at', { ascending: false })
         .limit(MAX_SLOTS);
       setExisting(data ?? []);
@@ -82,34 +106,56 @@ export default function ConsultantPortfolioUpdateScreen({ navigation }: any) {
   async function pickImage(idx: number) {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('Permission required', 'Please allow media library access.'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    // No allowsEditing/aspect here — the consultant picks their own crop
+    // shape and framing in ImageCropModal instead of a forced auto-crop.
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (!result.canceled && result.assets[0]) {
-      updateSlot(idx, { localUri: result.assets[0].uri, uploaded: false });
+      setCropSourceUri(result.assets[0].uri);
+      setCropTargetIdx(idx);
     }
+  }
+
+  function handleCropConfirm(crops: CropVariants) {
+    if (cropTargetIdx !== null) {
+      updateSlot(cropTargetIdx, { localCrops: crops, uploaded: false });
+    }
+    setCropSourceUri(null);
+    setCropTargetIdx(null);
+  }
+
+  function handleCropCancel() {
+    setCropSourceUri(null);
+    setCropTargetIdx(null);
   }
 
   async function handleSave(idx: number) {
     const slot = slots[idx];
     if (!slot.title.trim()) { Alert.alert('Required', 'Please enter an artwork title.'); return; }
-    if (!consultantProfile?.user_id) return;
+    if (!consultantProfile?.id) return;
 
     updateSlot(idx, { submitting: true });
     try {
-      let cloudUrl = slot.cloudUrl;
-      if (slot.localUri && !slot.uploaded) {
-        cloudUrl = await uploadToCloudinary(slot.localUri, 'portfolio');
-        updateSlot(idx, { cloudUrl, uploaded: true });
+      let cloudCrops = slot.cloudCrops;
+      if (slot.localCrops && !slot.uploaded) {
+        const [square, card, banner] = await Promise.all([
+          uploadToCloudinary(slot.localCrops.square, 'portfolio'),
+          uploadToCloudinary(slot.localCrops.card, 'portfolio'),
+          uploadToCloudinary(slot.localCrops.banner, 'portfolio'),
+        ]);
+        cloudCrops = { square, card, banner };
+        updateSlot(idx, { cloudCrops, uploaded: true });
       }
 
       const payload = {
-        consultant_id:  consultantProfile.user_id,
+        consultant_id:  consultantProfile.id,
         title:          slot.title.trim(),
-        size:           slot.size.trim() || null,
+        size:           formatSize(slot),
         medium:         slot.medium.trim() || null,
         price:          parseFloat(slot.price.replace(/,/g, '')) || 0,
         available:      slot.availableForSale,
-        brief:          slot.brief.trim() || null,
-        images:         cloudUrl ? [cloudUrl] : [],
+        description:    slot.description.trim() || null,
+        images:         cloudCrops ? [cloudCrops.square] : [],
+        image_variants: cloudCrops ?? null,
         updated_at:     new Date().toISOString(),
       };
 
@@ -126,12 +172,51 @@ export default function ConsultantPortfolioUpdateScreen({ navigation }: any) {
     finally { updateSlot(idx, { submitting: false }); }
   }
 
+  // Client-facing screens (Explore, Search, CreatorProfile, FeaturedCreatorCard)
+  // read portfolio thumbnails straight off consultant_profiles, not
+  // shop_products — keep the two in sync after every save. The square crop
+  // of every artwork feeds the grid/carousel; the card/banner crops of just
+  // the most recent artwork feed the dashboard featured-card and explore
+  // banner respectively.
+  async function syncProfilePortfolioImages() {
+    if (!consultantProfile?.id) return;
+    const { data } = await supabase
+      .from('shop_products')
+      .select('images, image_variants')
+      .eq('consultant_id', consultantProfile.id)
+      .order('created_at', { ascending: false })
+      .limit(MAX_SLOTS);
+    const rows = data ?? [];
+    const squareImages = rows.map((p: any) => p.image_variants?.square ?? p.images?.[0]).filter(Boolean);
+    const primary = rows[0];
+    const cardImage = primary?.image_variants?.card ?? primary?.images?.[0] ?? null;
+    const bannerImage = primary?.image_variants?.banner ?? primary?.images?.[0] ?? null;
+    await supabase.from('consultant_profiles').update({
+      portfolio_images: squareImages,
+      portfolio_card_image: cardImage,
+      portfolio_banner_image: bannerImage,
+    }).eq('id', consultantProfile.id);
+  }
+
   async function handleSubmitAll() {
     for (let i = 0; i < slots.length; i++) {
       if (slots[i].title.trim()) await handleSave(i);
     }
-    Alert.alert('Portfolio Updated ✅', 'Your portfolio has been submitted for review.');
-    navigation.goBack();
+    await syncProfilePortfolioImages();
+
+    if (fromOnboarding && consultantProfile?.id) {
+      await supabase.from('consultant_profiles').update({ is_approved: true }).eq('id', consultantProfile.id);
+      await fetchConsultantProfile();
+      Alert.alert(
+        'Profile Submitted 🎉',
+        'Your consultant profile is complete and pending admin approval. You can start exploring the consultant dashboard.',
+        [{ text: 'Continue', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Main', params: { screen: 'Dashboard' } }] }) }]
+      );
+    } else {
+      await fetchConsultantProfile();
+      Alert.alert('Portfolio Updated ✅', 'Your portfolio has been submitted for review.');
+      navigation.goBack();
+    }
   }
 
   function addSlot() {
@@ -164,7 +249,8 @@ export default function ConsultantPortfolioUpdateScreen({ navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={s.heroTitle}>Update{'\n'}Creative{'\n'}Portfolio</Text>
+        <Text style={s.heroTitle}>{fromOnboarding ? 'Build Your\nCreative\nPortfolio' : 'Update\nCreative\nPortfolio'}</Text>
+        {fromOnboarding && <Text style={s.stepHint}>Step 3 of 3 — the last step before your profile goes live.</Text>}
         <Text style={s.heroSub}>
           Upload your original five Artworks/ Craftworks/ Photographs to showcase your unique style and attract high-tier clients.
         </Text>
@@ -182,8 +268,8 @@ export default function ConsultantPortfolioUpdateScreen({ navigation }: any) {
 
             {/* Upload zone */}
             <TouchableOpacity style={s.uploadZone} onPress={() => pickImage(idx)} activeOpacity={0.85}>
-              {slot.localUri ? (
-                <Image source={{ uri: slot.localUri }} style={s.uploadPreview} />
+              {slot.localCrops ? (
+                <Image source={{ uri: slot.localCrops.square }} style={s.uploadPreview} />
               ) : (
                 <>
                   <Upload size={32} color={TEAL} />
@@ -198,7 +284,52 @@ export default function ConsultantPortfolioUpdateScreen({ navigation }: any) {
             <TextInput style={s.input} placeholder="e.g. Ethereal Drift" placeholderTextColor={colors.textTertiary} value={slot.title} onChangeText={v => updateSlot(idx, { title: v })} editable={mode === 'edit'} />
 
             <Text style={s.fieldLabel}>SIZE</Text>
-            <TextInput style={s.input} placeholder="e.g. 24 × 36 inches" placeholderTextColor={colors.textTertiary} value={slot.size} onChangeText={v => updateSlot(idx, { size: v })} editable={mode === 'edit'} />
+            <View style={s.sizeRow}>
+              <TextInput
+                style={[s.input, s.sizeInput]}
+                placeholder="Length"
+                placeholderTextColor={colors.textTertiary}
+                value={slot.length}
+                onChangeText={v => updateSlot(idx, { length: v.replace(/[^0-9.]/g, '') })}
+                keyboardType="decimal-pad"
+                editable={mode === 'edit'}
+              />
+              <Text style={s.sizeTimes}>×</Text>
+              <TextInput
+                style={[s.input, s.sizeInput]}
+                placeholder="Breadth"
+                placeholderTextColor={colors.textTertiary}
+                value={slot.breadth}
+                onChangeText={v => updateSlot(idx, { breadth: v.replace(/[^0-9.]/g, '') })}
+                keyboardType="decimal-pad"
+                editable={mode === 'edit'}
+              />
+              <View style={s.unitDropdownWrap}>
+                <TouchableOpacity
+                  style={s.unitTrigger}
+                  onPress={() => mode === 'edit' && setOpenUnitDropdownIdx(openUnitDropdownIdx === idx ? null : idx)}
+                  activeOpacity={0.85}
+                  disabled={mode !== 'edit'}
+                >
+                  <Text style={s.unitTriggerText}>{SIZE_UNITS.find(u => u.key === slot.sizeUnit)?.label}</Text>
+                  <ChevronDown size={14} color={NAVY} style={{ transform: [{ rotate: openUnitDropdownIdx === idx ? '180deg' : '0deg' }] }} />
+                </TouchableOpacity>
+                {openUnitDropdownIdx === idx && (
+                  <View style={s.unitDropdownList}>
+                    {SIZE_UNITS.map(u => (
+                      <TouchableOpacity
+                        key={u.key}
+                        style={s.unitDropdownItem}
+                        onPress={() => { updateSlot(idx, { sizeUnit: u.key }); setOpenUnitDropdownIdx(null); }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[s.unitDropdownItemText, u.key === slot.sizeUnit && s.unitDropdownItemTextActive]}>{u.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
 
             <Text style={s.fieldLabel}>MEDIUM</Text>
             <TextInput style={s.input} placeholder="e.g. Oil on Canvas" placeholderTextColor={colors.textTertiary} value={slot.medium} onChangeText={v => updateSlot(idx, { medium: v })} editable={mode === 'edit'} />
@@ -218,12 +349,13 @@ export default function ConsultantPortfolioUpdateScreen({ navigation }: any) {
               />
             </View>
 
+            <Text style={s.fieldLabel}>DESCRIPTION</Text>
             <TextInput
               style={s.textarea}
-              placeholder="Artwork brief:-"
+              placeholder="Describe this artwork — materials, inspiration, dimensions of detail buyers should know"
               placeholderTextColor={colors.textTertiary}
-              value={slot.brief}
-              onChangeText={v => updateSlot(idx, { brief: v })}
+              value={slot.description}
+              onChangeText={v => updateSlot(idx, { description: v })}
               multiline
               numberOfLines={3}
               textAlignVertical="top"
@@ -255,7 +387,7 @@ export default function ConsultantPortfolioUpdateScreen({ navigation }: any) {
         {/* ── Submit All ── */}
         <TouchableOpacity style={s.submitBtn} onPress={handleSubmitAll} activeOpacity={0.85}>
           <Send size={16} color="#fff" />
-          <Text style={s.submitBtnText}>Submit Portfolio Update</Text>
+          <Text style={s.submitBtnText}>{fromOnboarding ? 'Finish & Go Live' : 'Submit Portfolio Update'}</Text>
         </TouchableOpacity>
 
         {/* ── Current Portfolio ── */}
@@ -286,6 +418,13 @@ export default function ConsultantPortfolioUpdateScreen({ navigation }: any) {
           </>
         )}
       </ScrollView>
+
+      <ImageCropModal
+        visible={cropTargetIdx !== null}
+        imageUri={cropSourceUri}
+        onCancel={handleCropCancel}
+        onConfirm={handleCropConfirm}
+      />
     </SafeAreaView>
   );
 }
@@ -300,7 +439,8 @@ const s = StyleSheet.create({
   avatarFallback: { backgroundColor: TEAL, alignItems: 'center', justifyContent: 'center' },
   avatarInit: { color: '#fff', fontSize: 14, fontWeight: '800', fontFamily: fonts.heavy },
   scroll: { paddingHorizontal: 20, paddingBottom: 50 },
-  heroTitle: { fontSize: 36, fontWeight: '900', fontFamily: fonts.heavy, color: NAVY, lineHeight: 42, marginTop: 10, marginBottom: 10 },
+  heroTitle: { fontSize: 36, fontWeight: '900', fontFamily: fonts.heavy, color: NAVY, lineHeight: 42, marginTop: 10, marginBottom: 6 },
+  stepHint: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 20, marginBottom: 8 },
   heroSub: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 20, marginBottom: 4 },
   maxHint: { fontSize: fontSizes.sm, fontWeight: '700', fontFamily: fonts.heavy, color: ORANGE, marginBottom: 20 },
   // Slot card
@@ -313,6 +453,17 @@ const s = StyleSheet.create({
   uploadHint: { fontSize: fontSizes.sm, fontFamily: fonts.body, color: colors.textTertiary },
   fieldLabel: { fontSize: 10, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textTertiary, letterSpacing: 0.8, marginBottom: 6, marginTop: 12, paddingHorizontal: 12 },
   input: { backgroundColor: '#F8F9FB', borderRadius: 10, borderWidth: 1, borderColor: colors.borderInput, paddingHorizontal: 14, paddingVertical: 12, fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textPrimary, marginHorizontal: 12 },
+
+  sizeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 12 },
+  sizeInput: { flex: 1, marginHorizontal: 0 },
+  sizeTimes: { fontSize: fontSizes.base, fontFamily: fonts.medium, color: colors.textTertiary },
+  unitDropdownWrap: { position: 'relative' },
+  unitTrigger: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F8F9FB', borderRadius: 10, borderWidth: 1, borderColor: colors.borderInput, paddingHorizontal: 10, paddingVertical: 12 },
+  unitTriggerText: { fontSize: fontSizes.sm + 1, fontFamily: fonts.medium, color: NAVY },
+  unitDropdownList: { position: 'absolute', top: 48, right: 0, minWidth: 90, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: colors.borderInput, overflow: 'hidden', zIndex: 10, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6 }, android: { elevation: 4 } }) },
+  unitDropdownItem: { paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  unitDropdownItemText: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textPrimary },
+  unitDropdownItemTextActive: { fontFamily: fonts.heavy, color: NAVY, fontWeight: '700' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12 },
   toggleLabel: { fontSize: fontSizes.base, fontFamily: fonts.heavy, color: TEAL, fontWeight: '700' },
   textarea: { backgroundColor: '#F8F9FB', borderRadius: 10, borderWidth: 1, borderColor: colors.borderInput, paddingHorizontal: 14, paddingVertical: 12, fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textPrimary, minHeight: 80, marginHorizontal: 12, marginBottom: 12 },

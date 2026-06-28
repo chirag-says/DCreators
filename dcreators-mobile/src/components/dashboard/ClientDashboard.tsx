@@ -8,19 +8,19 @@ import React, { useCallback } from 'react';
 import {
   View,
   Text,
+  Image,
   ScrollView,
   StyleSheet,
   ImageBackground,
-  Platform,
   RefreshControl,
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ChevronRight } from 'lucide-react-native';
 import TopHeader from '../TopHeader';
 import SkeletonBar from '../common/SkeletonBar';
-import CreatorCard from './CreatorCard';
+import FeaturedCreatorCard from './FeaturedCreatorCard';
 import ClientProjectRow from './ClientProjectRow';
-import type { CardStyle } from './CreatorCard';
 import { useCreators } from '../../hooks/useCreators';
 import { useClientProjects } from '../../hooks/useProjects';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -29,7 +29,6 @@ import type { CreatorCardViewModel, MainTabScreenProps } from '../../types/navig
 import type { ProjectWithConsultant } from '../../services/projectService';
 import { RemoteAssets } from '../../lib/assets';
 
-
 // ─── Figma color tokens ──────────────────────────────────────
 const NAVY = '#1B3A5C';
 
@@ -37,70 +36,26 @@ interface ClientDashboardProps {
   navigation: MainTabScreenProps<'Dashboard'>['navigation'];
 }
 
-
-
 // Section configuration for the creator browsing cards
 const SECTIONS = [
-  {
-    title: 'Creators in Demand',
-    category: null as string | null,
-    headerBg: '#4D4D4D',
-    headerBorderColor: '#5a5a5a',
-    headerTextStyle: 'yellow' as const,
-    scrollBg: '#595959',
-    cardStyle: 'card' as CardStyle,
-    labelColors: ['#A64B3B', '#00A346', '#6B21A8', '#E03A5F'],
-  },
-  {
-    title: "Photographer's Archive",
-    category: 'photographer',
-    headerBg: '#1A1A1A',
-    headerBorderColor: '#000000',
-    headerTextStyle: 'gray' as const,
-    scrollBg: '#000000',
-    cardStyle: 'archive' as CardStyle,
-    labelColors: ['#F28220', '#A4A767', '#A35165'],
-  },
-  {
-    title: "Designer's Desk",
-    category: 'designer',
-    headerBg: '#4E3F30',
-    headerBorderColor: '#30261A',
-    headerTextStyle: 'light' as const,
-    scrollBg: '#5C4F40',
-    cardStyle: 'hub' as CardStyle,
-    labelColors: ['#A7A965', '#EE1F3E', '#009BD9'],
-  },
-  {
-    title: "Artist's Gallery",
-    category: 'sculptor',
-    headerBg: '#2C3E50',
-    headerBorderColor: '#1A2535',
-    headerTextStyle: 'gray' as const,
-    scrollBg: '#34495E',
-    cardStyle: 'archive' as CardStyle,
-    labelColors: ['#7FB3D3', '#E8A87C', '#82E0AA'],
-  },
-  {
-    title: "Artisan's Hub",
-    category: 'artisan',
-    headerBg: '#6B4C2A',
-    headerBorderColor: '#4A3218',
-    headerTextStyle: 'light' as const,
-    scrollBg: '#7D5A35',
-    cardStyle: 'card' as CardStyle,
-    labelColors: ['#F4D03F', '#E59866', '#A9DFBF'],
-  },
+  { title: 'Creators in Demand', category: null as string | null },
+  { title: "Photographer's Archive", category: 'photographer' },
+  { title: "Designer's Desk", category: 'designer' },
+  { title: "Artist's Gallery", category: 'sculptor' },
+  { title: "Artisan's Hub", category: 'artisan' },
 ];
 
-const HEADER_STYLES: Record<string, { color: string }> = {
-  yellow: { color: '#FACC15' },
-  gray: { color: '#D1D5DB' },
-  light: { color: '#E5E7EB' },
-};
+// Category tabs shown above the "Explore Creative Consultant's Portfolio" subtitle
+const CATEGORY_TABS = [
+  { key: 'photographer', label: 'Photographer', icon: require('../../../assets/Photographer 1.png') },
+  { key: 'designer', label: 'Designer', icon: require('../../../assets/Designer 1.png') },
+  { key: 'sculptor', label: 'Artist', icon: require('../../../assets/Artist 1.png') },
+  { key: 'artisan', label: 'Artisans', icon: require('../../../assets/Artisans 1.png') },
+] as const;
 
 export default function ClientDashboard({ navigation }: ClientDashboardProps) {
   const profile = useAuthStore((s) => s.profile);
+  const [activeCat, setActiveCat] = React.useState<string | null>(null);
   const { creators, loading: creatorsLoading, error: creatorsError, refresh: refreshCreators } = useCreators();
   const { projects: clientProjects, loading: projectsLoading, refresh: refreshProjects } = useClientProjects(profile?.id);
 
@@ -140,8 +95,6 @@ export default function ClientDashboard({ navigation }: ClientDashboardProps) {
     }
   }
 
-
-
   return (
     <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -153,12 +106,26 @@ export default function ClientDashboard({ navigation }: ClientDashboardProps) {
           refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={colors.primary} />}
         >
           <View style={styles.container}>
-            {/* ── Welcome Header ──────────────────── */}
-            <View style={styles.welcomeSection}>
-              <Text style={styles.welcomeGreeting}>Welcome back,</Text>
-              <Text style={styles.welcomeName}>{profile?.name || 'Client'}</Text>
-              <Text style={styles.welcomeTagline}>Hire Creatives. Buy Art. Build Ideas.</Text>
+            {/* ── Category tabs + subtitle (Figma order: icons, then subtitle) ─── */}
+            <View style={styles.tabsRow}>
+              {CATEGORY_TABS.map(({ key, label, icon }) => {
+                const active = activeCat === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={styles.tabItem}
+                    activeOpacity={0.7}
+                    onPress={() => setActiveCat(active ? null : key)}
+                  >
+                    <View style={[styles.tabIconWrap, active && styles.tabIconWrapActive]}>
+                      <Image source={icon} style={styles.tabIcon} resizeMode="contain" />
+                    </View>
+                    <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+            <Text style={styles.exploreSubtitle}>Explore Creative Consultant's Portfolio</Text>
 
             {/* Error Banner */}
             {creatorsError && (
@@ -180,46 +147,84 @@ export default function ClientDashboard({ navigation }: ClientDashboardProps) {
               </View>
             )}
 
-            {/* Creator Sections */}
+            {/* Creator Sections — each scrolls horizontally through that section's creators */}
             {creatorsLoading ? (
               <>
                 {[0, 1, 2].map((i) => (
-                  <View key={i} style={styles.sectionBox}>
-                    <View style={[styles.sectionHeader, { backgroundColor: '#4D4D4D' }]}>
-                      <SkeletonBar width={160} height={16} />
-                    </View>
-                    <View style={{ backgroundColor: '#595959', flexDirection: 'row', padding: 8, gap: 8 }}>
-                      {[0, 1, 2].map((j) => (
-                        <SkeletonBar key={j} width={140} height={130} borderRadius={8} />
+                  <View key={i} style={styles.sectionWrap}>
+                    <SkeletonBar width={160} height={16} />
+                    <View style={{ flexDirection: 'row', gap: spacing.md }}>
+                      {[0, 1].map((j) => (
+                        <SkeletonBar key={j} width={220} height={260} borderRadius={radii.lg} />
                       ))}
                     </View>
                   </View>
                 ))}
               </>
             ) : (
-              SECTIONS.map((section) => {
-                const sectionCreators = getCreatorsForSection(section);
-                return (
-                  <View key={section.title} style={styles.sectionBox}>
-                    <View style={[styles.sectionHeader, { backgroundColor: section.headerBg, borderBottomColor: section.headerBorderColor }]}>
-                      <Text style={[styles.headerText, HEADER_STYLES[section.headerTextStyle]]}>{section.title}</Text>
+              SECTIONS
+                .filter((section) => !activeCat || section.category === activeCat)
+                .map((section) => {
+                  const sectionCreators = getCreatorsForSection(section);
+                  if (sectionCreators.length === 0) return null;
+                  return (
+                    <View key={section.title} style={styles.sectionWrap}>
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.headerText}>{section.title}</Text>
+                        <TouchableOpacity style={styles.viewAllBtn} activeOpacity={0.7}>
+                          <Text style={styles.viewAllText}>View All</Text>
+                          <ChevronRight size={14} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.cardsScrollContent}
+                      >
+                        {sectionCreators.map((c, i) => (
+                          <FeaturedCreatorCard key={c.id} creator={c} index={i} onPress={goToProfile} />
+                        ))}
+                      </ScrollView>
                     </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent} style={{ backgroundColor: section.scrollBg }}>
-                      {sectionCreators.map((c, i) => (
-                        <CreatorCard
-                          key={c.id}
-                          creator={c}
-                          cardStyle={section.cardStyle}
-                          labelBg={section.labelColors[i % section.labelColors.length]}
-                          showCategoryChip={section.cardStyle === 'card'}
-                          onPress={goToProfile}
-                        />
-                      ))}
-                    </ScrollView>
-                  </View>
-                );
-              })
+                  );
+                })
             )}
+
+            {/* ── Dashboard toggle buttons (Figma chrome) ─── */}
+            <View style={styles.dashBtnRow}>
+              <TouchableOpacity
+                style={styles.dashBtn}
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('Shop')}
+              >
+                <Text style={styles.dashBtnText}>Sales Dashboard</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dashBtn}
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('History')}
+              >
+                <Text style={styles.dashBtnText}>Project Dashboard</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* ── Footer attribution ───────────────────── */}
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>
+                A Joint Venture of{' '}
+                <Text style={styles.footerBold}>Ishisoft Pvt.Ltd</Text>,{' '}
+                <Text style={styles.footerBold}>Mr. Shoumik Mazumder</Text> and
+              </Text>
+              <Text style={styles.footerText}>
+                <Text style={styles.footerBold}>Design &amp; Animation Club</Text>,
+                Department of Visual Arts, AUS
+              </Text>
+              <Text style={styles.footerText}>
+                Honorary Design Mentor -{' '}
+                <Text style={styles.footerBold}>Dr. Gautam Dutta</Text>,
+                Department of Visual Arts, AUS
+              </Text>
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -233,30 +238,49 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 0, gap: 16 },
 
-  // ── Welcome header ─────────────────────────────
-  welcomeSection: {
-    marginBottom: spacing.lg,
+  // ── Category tabs + subtitle ──────────────────
+  tabsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
   },
-  welcomeGreeting: {
-    fontSize: fontSizes.md,
-    fontFamily: fonts.body,
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+  },
+  tabIconWrap: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  tabIconWrapActive: {
+    borderColor: NAVY,
+  },
+  tabIcon: {
+    width: 60,
+    height: 60,
+  },
+  tabLabel: {
+    fontSize: fontSizes.xs + 1,
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
   },
-  welcomeName: {
-    fontSize: 32,
-    fontWeight: '800',
+  tabLabelActive: {
+    color: NAVY,
+    fontWeight: '700',
+    fontFamily: fonts.heavy,
+  },
+  exploreSubtitle: {
+    fontSize: fontSizes.base,
+    fontWeight: '700',
     fontFamily: fonts.heavy,
     color: NAVY,
-    lineHeight: 38,
-    marginTop: 2,
-  },
-  welcomeTagline: {
-    fontSize: fontSizes.sm,
-    fontFamily: fonts.medium,
-    color: colors.textTertiary,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginTop: spacing.sm,
+    textAlign: 'center',
   },
 
   // ── Error ─────────────────────────────────────
@@ -280,21 +304,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10,
   },
 
-  // ── Creator sections ──────────────────────────
-  sectionBox: {
-    borderRadius: 12, overflow: 'hidden',
-    borderWidth: 1, borderColor: 'rgba(163,163,163,0.6)', marginBottom: 16,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6 },
-      android: { elevation: 4 },
-    }),
+  // ── Creator sections (light header + single featured card) ────
+  sectionWrap: {
+    gap: spacing.sm,
   },
   sectionHeader: {
-    paddingVertical: 10, alignItems: 'center', borderBottomWidth: 1,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   headerText: {
-    fontWeight: '700', fontSize: 15, fontFamily: fonts.medium,
-    letterSpacing: 1.2, textTransform: 'uppercase',
+    fontWeight: '700', fontSize: fontSizes.lg, fontFamily: fonts.heavy,
+    color: colors.orange,
   },
-  scrollContent: { padding: 10, gap: 10 },
+  viewAllBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+  },
+  viewAllText: {
+    fontSize: fontSizes.xs + 1, fontFamily: fonts.medium, fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  cardsScrollContent: {
+    gap: spacing.md,
+    paddingRight: spacing.xs,
+  },
+
+  // ── Dashboard toggle buttons ──────────────────
+  dashBtnRow: {
+    flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs,
+  },
+  dashBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: radii.md,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#fff', borderWidth: 1.5, borderColor: NAVY,
+  },
+  dashBtnText: {
+    color: NAVY, fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy,
+  },
+
+  // ── Footer ────────────────────────────────────
+  footer: {
+    alignItems: 'center', gap: 3,
+    paddingTop: spacing.sm, paddingBottom: spacing.lg,
+  },
+  footerText: {
+    fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textTertiary,
+    textAlign: 'center', lineHeight: 18,
+  },
+  footerBold: {
+    fontFamily: fonts.heavy, color: colors.textSecondary, fontWeight: '700',
+  },
 });

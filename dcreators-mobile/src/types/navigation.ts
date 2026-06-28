@@ -19,6 +19,8 @@ export interface CreatorCardViewModel {
   avatar_public_id: string;
   avatar_url?: string | null;
   portfolio_images?: string[] | null;
+  portfolio_card_image?: string | null;
+  portfolio_banner_image?: string | null;
   category: string;
   base_price: number | null;
   is_approved: boolean;
@@ -35,7 +37,7 @@ export type RootStackParamList = {
   ForgotPassword: undefined;
   OTPVerification: { email: string };
   Intro: undefined;
-  CreatorOnboarding: undefined;
+  CreateCreatorAccount: undefined;
   ClientOnboarding: undefined;
 
   // Main tab navigator
@@ -75,13 +77,13 @@ export type RootStackParamList = {
 
   // Phase 5 — Consultant Management
   ConsultantEarningsHistory: undefined;
-  ConsultantServicePricing: undefined;
+  ConsultantServicePricing: { fromOnboarding?: boolean } | undefined;
   ConsultantProjectManagement: undefined;
 
   // Phase 6 — Remaining Figma Screens
   ExploreConsultants: undefined;
   HireConsultant: { consultant?: any } | undefined;
-  ConsultantPortfolioUpdate: undefined;
+  ConsultantPortfolioUpdate: { fromOnboarding?: boolean } | undefined;
   PaymentConfirmed: { transactionId?: string; amountPaid?: number; paidAt?: string; projectId?: string } | undefined;
   ArtistSalesRequestDetail: { order: any };
 

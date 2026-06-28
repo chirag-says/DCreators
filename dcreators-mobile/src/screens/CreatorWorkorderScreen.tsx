@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
+import FigmaBottomBar from '../components/FigmaBottomBar';
 import { supabase } from '../lib/supabase';
 import { updateProjectStatus } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
@@ -19,6 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import {
   FileText, ImageIcon, Info, X, ImagePlus, Upload,
   MessageCircle, Download, Users, BadgeCheck,
+  CalendarClock, CheckCircle2, Handshake,
 } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 import type { Submission, ConsultantProfile } from '../types';
@@ -52,7 +54,7 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
   const [proposedAmount, setProposedAmount] = useState(project?.final_offer ? String(project.final_offer) : '');
   const [proposedDeadline, setProposedDeadline] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
+  const [showNegotiateForm, setShowNegotiateForm] = useState(false);
   const [collaborators, setCollaborators] = useState<ConsultantProfile[]>([]);
   const [selectedCollab, setSelectedCollab] = useState<ConsultantProfile | null>(null);
   const [loadingCollab, setLoadingCollab] = useState(false);
@@ -269,27 +271,119 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
             </View>
           )}
 
-          {/* Project info card */}
-          <View style={styles.briefCard}>
-            <Text style={styles.briefTitle}>{project?.assignment_details?.[0] || assignmentType}</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>ESTIMATED BUDGET</Text>
-              <Text style={styles.infoValue}>₹{budget.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>PROJECT DEADLINE</Text>
-              <Text style={styles.briefText}>{deadlineFormatted}</Text>
-            </View>
-            {project?.assignment_brief && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>BRIEF</Text>
-                <Text style={styles.briefText}>{project.assignment_brief}</Text>
-              </View>
-            )}
+          {/* ── Project info card (Figma screen 10 layout) ── */}
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryBadgeText}>
+              {(project?.assignment_type ?? 'CREATIVE SERVICE').toUpperCase()}
+            </Text>
           </View>
 
-          {/* ── NEGOTIATION MODE ── */}
-          {isNegotiation && (
+          <Text style={styles.projectMainTitle}>
+            {project?.assignment_details?.[0] || assignmentType}
+          </Text>
+
+          {/* Budget card */}
+          <View style={styles.budgetCard}>
+            <Text style={styles.budgetLabel}>ESTIMATED BUDGET</Text>
+            <Text style={styles.budgetValue}>₹{budget.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+          </View>
+
+          {/* Assignment brief quote */}
+          {project?.assignment_brief && (
+            <View style={styles.briefBlock}>
+              <View style={styles.briefBlockHeader}>
+                <FileText size={14} color={colors.primary} />
+                <Text style={styles.briefBlockTitle}>ASSIGNMENT BRIEF</Text>
+              </View>
+              <Text style={styles.briefQuote}>“{project.assignment_brief}”</Text>
+            </View>
+          )}
+
+          {/* Key Deliverables */}
+          {(project?.assignment_details?.length > 0) && (
+            <View style={styles.deliverablesBlock}>
+              <Text style={styles.deliverablesTitle}>KEY DELIVERABLES</Text>
+              {(project.assignment_details as string[]).map((d: string, i: number) => (
+                <View key={i} style={styles.deliverableRow}>
+                  <View style={styles.deliverableIcon} />
+                  <Text style={styles.deliverableText}>{d}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Deadline row */}
+          <View style={styles.deadlineRow}>
+            <View style={styles.deadlineIcon}>
+              <CalendarClock size={16} color={colors.textSecondary} />
+            </View>
+            <View>
+              <Text style={styles.deadlineLabel}>DEADLINE</Text>
+              <Text style={styles.deadlineValue}>{deadlineFormatted}</Text>
+            </View>
+          </View>
+
+          {/* ── 4 ACTION BUTTONS (Figma screen 10) ── */}
+          {status === 'assigned' && (
+            <View style={styles.actionBtnGroup}>
+              {/* Accept Project — navy filled pill */}
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnAccept, submitting && { opacity: 0.6 }]}
+                onPress={handleSubmitOffer}
+                disabled={submitting}
+                activeOpacity={0.85}
+              >
+                {submitting
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <>
+                <CheckCircle2 size={18} color="#fff" />
+                      <Text style={styles.actionBtnAcceptText}>Accept Project</Text>
+                    </>
+                }
+              </TouchableOpacity>
+
+              {/* Negotiate — teal outline pill */}
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnNegotiate]}
+                onPress={() => setShowNegotiateForm(v => !v)}
+                activeOpacity={0.85}
+              >
+                <Handshake size={18} color={colors.teal} />
+                <Text style={styles.actionBtnNegotiateText}>Negotiate</Text>
+              </TouchableOpacity>
+
+              {/* Collaborate — gray outline pill */}
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnCollab]}
+                onPress={() => { setShowCollab(true); if (collaborators.length === 0) fetchCollaborators(); }}
+                activeOpacity={0.85}
+              >
+                <Users size={18} color={colors.primary} />
+                <Text style={styles.actionBtnCollabText}>Collaborate</Text>
+              </TouchableOpacity>
+
+              {/* Pass on — red outline chip */}
+              <TouchableOpacity
+                style={styles.actionBtnPassOn}
+                onPress={() => Alert.alert('Pass on Project', 'Decline this assignment?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Pass on', style: 'destructive', onPress: async () => {
+                    try {
+                      await updateProjectStatus(project.id, 'assigned');
+                      navigation.goBack();
+                    } catch {}
+                  }},
+                ])}
+                activeOpacity={0.85}
+              >
+                <X size={16} color="#EF4444" />
+                <Text style={styles.actionBtnPassOnText}>Pass on</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Negotiate form (shown inline when Negotiate tapped) */}
+          {(isNegotiation && showNegotiateForm) && (
             <View style={styles.negotiationCard}>
               <Text style={styles.sectionLabel}>Negotiable amount</Text>
               <View style={styles.amountInputRow}>
@@ -418,15 +512,7 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
         </ScrollView>
       )}
 
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bottomBackBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.bottomBackText}>← Back</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomChatBtn} onPress={() => navigation.navigate('Chat', { project, otherName: 'Client' })}>
-          <MessageCircle size={16} color={colors.textOnPrimary} />
-          <Text style={styles.bottomChatText}>Chat</Text>
-        </TouchableOpacity>
-      </View>
+      <FigmaBottomBar navigation={navigation} activeTab="sales" />
 
       <Modal visible={!!uploadRound} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -542,7 +628,7 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 100 },
 
-  screenTitle: { fontSize: 36, fontWeight: '800', fontFamily: fonts.heavy, color: '#E87B35', paddingHorizontal: spacing.xl, paddingTop: 16, lineHeight: 42 },
+  screenTitle: { fontSize: 32, fontWeight: '800', fontFamily: fonts.heavy, color: '#1B3A5C', paddingHorizontal: spacing.xl, paddingTop: 16, lineHeight: 40 },
   headerSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md },
   projectTitle: { fontSize: fontSizes['2xl'], fontWeight: '700', fontFamily: fonts.heavy, color: colors.orange, marginBottom: spacing.xs },
   projectSubtitle: { fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textSecondary },
@@ -586,8 +672,6 @@ const styles = StyleSheet.create({
   collaborateBtnText: { color: '#fff', fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy },
 
 
-  categoryBadge: { alignSelf: 'flex-start', marginLeft: spacing.xl, marginBottom: spacing.lg, backgroundColor: '#E0F5F1', paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radii.xl, borderWidth: 1, borderColor: colors.teal },
-  categoryBadgeText: { fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy, color: colors.teal, letterSpacing: 0.5 },
 
   briefCard: { marginHorizontal: spacing.xl, backgroundColor: colors.cardBg, borderRadius: radii.lg, padding: spacing.lg, marginBottom: spacing.lg, borderWidth: 1, borderColor: colors.border, ...shadows.card },
   briefTitle: { fontSize: fontSizes.xl, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textPrimary, marginBottom: spacing.sm },
@@ -624,12 +708,71 @@ const styles = StyleSheet.create({
   releaseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.teal, paddingVertical: 16, borderRadius: radii.lg },
   releaseBtnText: { color: colors.textOnPrimary, fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
 
-  // Bottom bar
-  bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, paddingBottom: Platform.OS === 'ios' ? 30 : spacing.md, backgroundColor: colors.cardBg, borderTopWidth: 1, borderTopColor: colors.borderCard },
-  bottomBackBtn: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
-  bottomBackText: { fontSize: fontSizes.base, fontFamily: fonts.medium, color: colors.textPrimary },
-  bottomChatBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.primary, paddingVertical: spacing.md, paddingHorizontal: spacing.xl, borderRadius: radii.lg },
-  bottomChatText: { color: colors.textOnPrimary, fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
+  // ── NEW Figma screen 10 styles ────────────────────────────
+  categoryBadge: {
+    alignSelf: 'flex-start', marginLeft: spacing.xl, marginBottom: spacing.sm,
+    backgroundColor: '#E0F5F1', paddingVertical: 5, paddingHorizontal: 12,
+    borderRadius: 20, borderWidth: 1, borderColor: '#3D9B8F',
+  },
+  categoryBadgeText: { fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy, color: '#3D9B8F', letterSpacing: 0.5 },
+
+  projectMainTitle: {
+    fontSize: 22, fontWeight: '800', fontFamily: fonts.heavy, color: colors.primary,
+    lineHeight: 30, paddingHorizontal: spacing.xl, marginBottom: 16,
+  },
+
+  budgetCard: {
+    marginHorizontal: spacing.xl, backgroundColor: '#fff', borderRadius: 14, padding: 18,
+    marginBottom: 16, borderWidth: 1, borderColor: colors.border,
+    ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4 }, android: { elevation: 1 } }),
+  },
+  budgetLabel: { fontSize: 10, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textTertiary, letterSpacing: 0.8, marginBottom: 6 },
+  budgetValue: { fontSize: 28, fontWeight: '900', fontFamily: fonts.heavy, color: colors.primary },
+
+  briefBlock: {
+    marginHorizontal: spacing.xl, backgroundColor: '#fff', borderRadius: 14, padding: 18,
+    marginBottom: 14, borderWidth: 1, borderColor: colors.border,
+  },
+  briefBlockHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  briefBlockTitle: { fontSize: 11, fontWeight: '700', fontFamily: fonts.heavy, color: colors.primary, letterSpacing: 0.5 },
+  briefQuote: { fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 24, fontStyle: 'italic' },
+
+  deliverablesBlock: {
+    marginHorizontal: spacing.xl, backgroundColor: '#fff', borderRadius: 14, padding: 18,
+    marginBottom: 14, borderWidth: 1, borderColor: colors.border,
+  },
+  deliverablesTitle: { fontSize: 11, fontWeight: '700', fontFamily: fonts.heavy, color: '#3D9B8F', letterSpacing: 0.5, marginBottom: 12 },
+  deliverableRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  deliverableIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#EEF9F8', borderWidth: 1, borderColor: '#3D9B8F' },
+  deliverableText: { flex: 1, fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textPrimary, lineHeight: 20 },
+
+  deadlineRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginHorizontal: spacing.xl, marginBottom: 20,
+  },
+  deadlineIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  deadlineLabel: { fontSize: 10, fontWeight: '700', fontFamily: fonts.heavy, color: '#3D9B8F', letterSpacing: 0.8, marginBottom: 2 },
+  deadlineValue: { fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy, color: colors.primary },
+
+  // Action button group
+  actionBtnGroup: { paddingHorizontal: spacing.xl, marginBottom: 20, gap: 12 },
+  actionBtn: {
+    width: '100%', borderRadius: 14, paddingVertical: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+  },
+  actionBtnAccept: { backgroundColor: colors.primary },
+  actionBtnAcceptText: { color: '#fff', fontSize: fontSizes.base, fontWeight: '800', fontFamily: fonts.heavy },
+  actionBtnNegotiate: { borderWidth: 1.5, borderColor: '#3D9B8F', backgroundColor: '#fff' },
+  actionBtnNegotiateText: { color: '#3D9B8F', fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
+  actionBtnCollab: { borderWidth: 1.5, borderColor: '#D1D5DB', backgroundColor: '#fff' },
+  actionBtnCollabText: { color: colors.primary, fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
+  actionBtnPassOn: {
+    alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1.5, borderColor: '#EF4444', borderRadius: 12,
+    paddingVertical: 10, paddingHorizontal: 18, backgroundColor: '#fff',
+  },
+  actionBtnPassOnText: { color: '#EF4444', fontSize: fontSizes.sm + 1, fontWeight: '700', fontFamily: fonts.heavy },
+
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },

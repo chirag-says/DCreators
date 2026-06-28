@@ -34,6 +34,7 @@ import { updateProjectStatus } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
+import FigmaBottomBar from '../components/FigmaBottomBar';
 
 const NAVY = '#1B3A5C';
 const TEAL = '#0D7F7A';
@@ -297,26 +298,7 @@ export default function ConsultantWorkOrderScreen({ navigation, route }: any) {
         )}
       </ScrollView>
 
-      {/* Bottom nav */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bottomBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.bottomBtnLabel}>← Back</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.bottomHomeBtn}
-          onPress={() => navigation.navigate('Main', { screen: 'Dashboard' })}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.bottomHomeBtnLabel}>🏠  Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.bottomBtn}
-          onPress={() => navigation.navigate('Main', { screen: 'Search' })}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.bottomBtnLabel}>🔍 Search</Text>
-        </TouchableOpacity>
-      </View>
+      <FigmaBottomBar navigation={navigation} activeTab="sales" />
     </SafeAreaView>
   );
 }

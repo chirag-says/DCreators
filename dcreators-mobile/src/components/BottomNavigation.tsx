@@ -1,147 +1,119 @@
-import React from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
-import { Home, Search, Clock, CheckCircle, ShoppingCart, MessageSquare, FileText, User } from 'lucide-react-native';
+/**
+ * BottomNavigation — Figma exact replica
+ * Screen 33: BottomNavBar.png
+ *
+ * Style: white background, navy active, gray inactive, rounded top border
+ *
+ * Tab visibility depends on role:
+ *   - client:     HOME | SEARCH | HISTORY | PROFILE
+ *   - consultant: HOME | SEARCH | PROFILE
+ *
+ * Note: consultant Home (Dashboard tab) already renders CreatorDashboardScreen,
+ * which has its own Sales Dashboard / Project Dashboard toggle — so there is no
+ * separate "SALES" tab here (it would just duplicate Home and drop the tab bar).
+ *
+ * No BACK tab — native iOS/Android swipe-back gesture (and the hardware/edge
+ * swipe) handles backwards navigation; a dedicated button duplicated that.
+ */
+import React, { useEffect, useRef } from 'react';
+import {
+  View, TouchableOpacity, Text, StyleSheet, Platform, LayoutAnimation, UIManager,
+} from 'react-native';
+import {
+  Home, Search, User, Clock,
+} from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/useAuthStore';
-import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { fonts, fontSizes } from '../styles/theme';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// Figma tokens
+const NAVY   = '#1B3A5C';
+const GRAY   = '#9CA3AF';
+const WHITE  = '#FFFFFF';
+const BORDER = '#E5E7EB';
+
+interface TabDef {
+  name: string;
+  label: string;
+  Icon: React.FC<{ size: number; color: string; strokeWidth?: number }>;
+}
 
 export default function BottomNavigation({ state, navigation: tabNavigation }: any) {
   const stackNavigation = useNavigation<any>();
   const navigation = tabNavigation || stackNavigation;
-  const insets = useSafeAreaInsets();
+  const insets     = useSafeAreaInsets();
   const currentRole = useAuthStore((s) => s.currentRole);
-  const consultantProfile = useAuthStore((s) => s.consultantProfile);
-  const profile = useAuthStore((s) => s.profile);
 
   const currentRouteName = state ? state.routes[state.index].name : '';
 
-  // Detect if we're on a CreatorProfile screen and extract the creator data
-  const isOnCreatorProfile = currentRouteName === 'CreatorProfile';
-  const activeCreator = isOnCreatorProfile && state
-    ? state.routes[state.index]?.params?.creator || null
-    : null;
-
-  // Hide the ActionBanner on screens where it's contextually redundant
-  const HIDE_BANNER_SCREENS = [
-    'AssignProject', 'Payment', 'Terms', 'Chat',
-    'ClientReview', 'ClientWorkorder', 'CreatorWorkorder', 'Invoice',
-    'AssignMultiple', 'EditProfile', 'EditConsultantProfile',
-    'CreatorOnboardingStep1', 'CreatorOnboardingStep2', 'CreatorOnboardingStep3',
-    'ClientOnboarding', 'Settings', 'Notifications',
-  ];
-  const showBanner = !HIDE_BANNER_SCREENS.includes(currentRouteName);
-
-  // Client tabs
-  const clientTabs = [
-    { name: 'Dashboard', label: 'Home', icon: Home },
-    { name: 'Search', label: 'Search', icon: Search },
-    { name: 'History', label: 'History', icon: Clock },
+  // ── Tab definitions per role ────────────────────────────────
+  const clientTabs: TabDef[] = [
+    { name: 'Dashboard', label: 'HOME',   Icon: Home },
+    { name: 'Search',    label: 'SEARCH', Icon: Search },
+    { name: 'History',   label: 'HISTORY',Icon: Clock },
+    { name: 'EditProfile', label: 'PROFILE', Icon: User },
   ];
 
-  // Consultant tabs
-  const consultantTabs = [
-    { name: 'Dashboard', label: 'Home', icon: Home },
-    { name: 'FloatingQuery', label: 'Queries', icon: MessageSquare },
-    { name: 'CreatorWorkorder', label: 'Orders', icon: FileText },
+  const consultantTabs: TabDef[] = [
+    { name: 'Dashboard', label: 'HOME',   Icon: Home },
+    { name: 'Search',    label: 'SEARCH', Icon: Search },
+    { name: 'EditConsultantProfile', label: 'PROFILE', Icon: User },
   ];
 
   const tabs = currentRole === 'consultant' ? consultantTabs : clientTabs;
 
+  // Smooth out the tab-count reflow (4 consultant tabs vs 5 client tabs)
+  // when the Client ↔ Creator switch is toggled, instead of an instant snap.
+  const prevRole = useRef(currentRole);
+  useEffect(() => {
+    if (prevRole.current !== currentRole) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      prevRole.current = currentRole;
+    }
+  }, [currentRole]);
+
+  function handlePress(tab: TabDef) {
+    // Use tab navigator if available, else stack navigate
+    if (tabNavigation) {
+      try { tabNavigation.navigate(tab.name); } catch { stackNavigation.navigate(tab.name); }
+    } else {
+      stackNavigation.navigate(tab.name);
+    }
+  }
+
   return (
-    <View style={styles.wrapper}>
-      {/* Action Banner — hidden on task-specific screens */}
-      {showBanner && (
-      <View style={styles.actionBanner}>
-        {isOnCreatorProfile ? (
-          /* ── CreatorProfile: same layout, personalized for THIS creator ── */
-          <>
-            <TouchableOpacity 
-              style={styles.leftAction}
-              onPress={() => navigation.navigate('AssignProject', { creator: activeCreator })}
-            >
-              <CheckCircle size={28} color={colors.primary} strokeWidth={2.5} />
-              <View style={styles.textStack}>
-                <Text style={styles.mainText}>Assign Project to {activeCreator?.name || 'Creator'} /</Text>
-                <Text style={styles.subText}>Hire {activeCreator?.name || 'Creative Consultant'}</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.rightAction}
-              onPress={() => navigation.navigate('Shop', { creatorId: activeCreator?.id, creator: activeCreator })}
-            >
-              <ShoppingCart size={24} color={colors.primaryDark} />
-              <Text style={styles.shopText}>Add to Cart</Text>
-            </TouchableOpacity>
-          </>
-        ) : currentRole === 'consultant' ? (
-          <>
-            <TouchableOpacity 
-              style={styles.leftAction}
-              onPress={() => navigation.navigate('CreatorProfile', { creator: {
-                id: consultantProfile?.id,
-                name: consultantProfile?.display_name || profile?.name || 'Creator',
-                code: consultantProfile?.code || 'D---',
-                subtitle: consultantProfile?.subtitle || '',
-                experience: consultantProfile?.experience || '',
-                expertise: consultantProfile?.expertise || '',
-                category: consultantProfile?.category || 'photographer',
-                base_price: consultantProfile?.base_price,
-                user_id: consultantProfile?.user_id,
-                avatar_url: consultantProfile?.avatar_url || null,
-                portfolio_images: consultantProfile?.portfolio_images || [],
-              }})}
-            >
-              <User size={28} color={colors.success} strokeWidth={2.5} />
-              <View style={styles.textStack}>
-                <Text style={styles.mainText}>My Profile /</Text>
-                <Text style={styles.subText}>Portfolio & Settings</Text>
-              </View>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <TouchableOpacity 
-            style={styles.leftAction}
-            onPress={() => navigation.navigate('AssignProject')}
-          >
-            <CheckCircle size={28} color="#EF4444" strokeWidth={2.5} />
-            <View style={styles.textStack}>
-              <Text style={styles.mainText}>Assign Project /</Text>
-              <Text style={styles.subText}>Hire Creative Consultant</Text>
-            </View>
-          </TouchableOpacity>
-        )}
+    <View style={[styles.wrapper, { paddingBottom: Math.max(8, insets.bottom) }]}>
+      {/* Top border */}
+      <View style={styles.topBorder} />
 
-        {/* Shop icon — only on non-profile screens */}
-        {!isOnCreatorProfile && (
-          <TouchableOpacity 
-            style={styles.rightAction}
-            onPress={() => navigation.navigate('Shop')}
-          >
-            <ShoppingCart size={24} color={colors.primaryDark} />
-            <Text style={styles.shopText}>Shop</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-      )}
+      {tabs.map((tab) => {
+        const isActive = currentRouteName === tab.name;
+        const iconColor = isActive ? NAVY : GRAY;
 
-      {/* Bottom Navigation Tabs */}
-      <View style={[styles.navBar, { paddingBottom: Math.max(10, insets.bottom) }]}>
-        {tabs.map((tab) => {
-          const isActive = currentRouteName === tab.name;
-          const IconComponent = tab.icon;
-          return (
-            <TouchableOpacity 
-              key={tab.name}
-              style={styles.navItem} 
-              onPress={() => navigation.navigate(tab.name)}
-            >
-              <IconComponent size={24} color={isActive ? '#EAB308' : '#9CA3AF'} strokeWidth={2} />
-              <Text style={[styles.navText, { color: isActive ? '#EAB308' : '#9CA3AF' }]}>{tab.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+        return (
+          <TouchableOpacity
+            key={tab.name}
+            style={styles.tabItem}
+            onPress={() => handlePress(tab)}
+            activeOpacity={0.7}
+            accessibilityLabel={tab.label}
+          >
+            <tab.Icon
+              size={22}
+              color={iconColor}
+              strokeWidth={isActive ? 2.5 : 2}
+            />
+            <Text style={[styles.tabLabel, { color: iconColor, fontWeight: isActive ? '800' : '600' }]}>
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
@@ -149,71 +121,39 @@ export default function BottomNavigation({ state, navigation: tabNavigation }: a
 const styles = StyleSheet.create({
   wrapper: {
     width: '100%',
-  },
-
-  // Action Banner
-  actionBanner: {
-    width: '100%',
-    backgroundColor: '#EAEAEA',
+    backgroundColor: WHITE,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderCard,
-  },
-  leftAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  textStack: {
-    flexDirection: 'column',
-  },
-  mainText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: fonts.heavy,
-  },
-  subText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginTop: -2,
-    fontFamily: fonts.medium,
-  },
-  rightAction: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-  },
-  shopText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    fontFamily: fonts.heavy,
-  },
-
-  // Navigation Bar
-  navBar: {
-    width: '100%',
-    backgroundColor: '#111111',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
     paddingTop: 10,
-    // paddingBottom is applied dynamically via insets
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: { elevation: 8 },
+    }),
   },
-  navItem: {
+  topBorder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: BORDER,
+  },
+  tabItem: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+    paddingBottom: 4,
   },
-  navText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#9CA3AF',
+  tabLabel: {
+    fontSize: fontSizes.xs,
+    fontFamily: fonts.heavy,
+    letterSpacing: 0.3,
+    marginTop: 2,
   },
 });

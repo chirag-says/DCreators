@@ -3,8 +3,10 @@
  * Role: CONSULTANT | Figma: "Creators Dashboard - Final.png"
  *
  * Toggle at top:
- *   "Sales Dashboard"   → shows ConsultantDashboard (artwork_orders, Product B)
- *   "Project Dashboard" → shows this portfolio grid (shop_products)
+ *   "Sales Dashboard"   → things for sale: artwork listings (shop_products) +
+ *                          incoming purchase requests (artwork_orders)
+ *   "Project Dashboard" → things being worked on: active project/service
+ *                          assignments (projects table)
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import {
@@ -12,13 +14,12 @@ import {
   Image, ActivityIndicator, Alert, Platform, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Edit3, Trash2, Plus, Bell,
-} from 'lucide-react-native';
+import { Edit3, Trash2, Plus, Briefcase } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import ConsultantDashboard from '../components/dashboard/ConsultantDashboard';
+import TopHeader from '../components/TopHeader';
 
 const NAVY   = '#1B3A5C';
 const ORANGE = '#E87B35';
@@ -97,82 +98,29 @@ export default function CreatorDashboardScreen({ navigation }: any) {
     return '#059669';
   }
 
-  // ── Sales Dashboard tab renders ConsultantDashboard (Product B) ──
-  if (activeTab === 'sales') {
-    return (
-      <View style={{ flex: 1 }}>
-        {/* Toggle stays visible at the very top */}
-        <SafeAreaView style={{ backgroundColor: BG }} edges={['top']}>
-          <View style={s.toggleRow}>
-            <TouchableOpacity
-              style={[s.toggleBtn, s.toggleBtnActive]}
-              onPress={() => setActiveTab('sales')}
-              activeOpacity={0.8}
-            >
-              <Text style={[s.toggleLabel, s.toggleLabelActive]}>Sales Dashboard</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.toggleBtn}
-              onPress={() => setActiveTab('portfolio')}
-              activeOpacity={0.8}
-            >
-              <Text style={s.toggleLabel}>Project Dashboard</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-        {/* ConsultantDashboard handles its own SafeAreaView / scroll */}
-        <ConsultantDashboard navigation={navigation} />
-      </View>
-    );
-  }
-
-  // ── Portfolio / Project Dashboard tab ──
+  // ── Shared header used by both tabs (Figma "Project Dashboard" look) ──
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
 
-      {/* Header */}
-      <View style={s.header}>
-        <View>
-          <Text style={s.tagline}>HIRE CREATIVES. BUY ART. BUILD IDEAS</Text>
-          <Text style={s.dashTitle}>{'Creator\'s\nDashboard'}</Text>
-        </View>
-        <View style={s.headerActions}>
-          <TouchableOpacity
-            style={s.iconBtn}
-            onPress={() => navigation.navigate('Notifications')}
-            activeOpacity={0.7}
-          >
-            <Bell size={18} color={NAVY} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('EditConsultantProfile')}
-            activeOpacity={0.8}
-          >
-            {profile?.avatar_url
-              ? <Image source={{ uri: profile.avatar_url }} style={s.avatar} />
-              : <View style={[s.avatar, s.avatarFallback]}>
-                  <Text style={s.avatarInitial}>{(profile?.name ?? 'A').charAt(0).toUpperCase()}</Text>
-                </View>
-            }
-          </TouchableOpacity>
-        </View>
-      </View>
+      {/* Header: same TopHeader used on the client side (hamburger + role switch + search/user) */}
+      <TopHeader />
+      <Text style={s.dashTitle}>Creator's Dashboard</Text>
 
       {/* Sales Dashboard / Project Dashboard toggle pills */}
       <View style={s.toggleRow}>
         <TouchableOpacity
-          style={s.toggleBtn}
+          style={[s.toggleBtn, activeTab === 'sales' && s.toggleBtnActive]}
           onPress={() => setActiveTab('sales')}
           activeOpacity={0.8}
         >
-          <Text style={s.toggleLabel}>Sales Dashboard</Text>
+          <Text style={[s.toggleLabel, activeTab === 'sales' && s.toggleLabelActive]}>Sales Dashboard</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[s.toggleBtn, s.toggleBtnActive]}
+          style={[s.toggleBtn, activeTab === 'portfolio' && s.toggleBtnActive]}
           onPress={() => setActiveTab('portfolio')}
           activeOpacity={0.8}
         >
-          <Text style={[s.toggleLabel, s.toggleLabelActive]}>Project Dashboard</Text>
+          <Text style={[s.toggleLabel, activeTab === 'portfolio' && s.toggleLabelActive]}>Project Dashboard</Text>
         </TouchableOpacity>
       </View>
 
@@ -182,126 +130,147 @@ export default function CreatorDashboardScreen({ navigation }: any) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={TEAL} />}
       >
 
-        {/* 2A.2: Incoming project assignments inbox */}
-        {projects.length > 0 && (
-          <View style={s.inboxSection}>
-            <Text style={s.inboxTitle}>Active Project Assignments</Text>
-            {projects.map((proj: any) => {
-              const clientName = (proj.profiles as any)?.name ?? 'Client';
-              const STATUS_COLORS: Record<string, string> = {
-                assigned: '#E87B35', advance_pending: '#F59E0B', in_progress: '#0D7F7A',
-                review_1: '#6366F1', review_2: '#8B5CF6', final_review: '#EC4899',
-                work_order_generated: '#3B82F6', work_order_accepted: '#10B981',
-                advance_paid: '#14B8A6',
-              };
-              const badgeColor = STATUS_COLORS[proj.status] ?? '#9CA3AF';
-              return (
+        {activeTab === 'sales' ? (
+          <>
+            {/* Things for sale: artwork listings */}
+            <View style={s.listHeader}>
+              <Text style={s.listTitle}>My Artwork Listings</Text>
+              <TouchableOpacity
+                style={s.addBtn}
+                onPress={() => navigation.navigate('ConsultantPortfolioUpdate')}
+                activeOpacity={0.85}
+              >
+                <Plus size={16} color="#fff" />
+                <Text style={s.addBtnText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+
+            {loading ? (
+              <ActivityIndicator size="large" color={TEAL} style={{ marginTop: 40 }} />
+            ) : products.length === 0 ? (
+              <View style={s.emptyWrap}>
+                <Text style={s.emptyTitle}>No listings yet</Text>
+                <Text style={s.emptySub}>Add your first artwork to start selling</Text>
                 <TouchableOpacity
-                  key={proj.id}
-                  style={s.projectCard}
-                  onPress={() => navigation.navigate('Main', { screen: 'CreatorWorkorder', params: { project: proj } })}
+                  style={s.emptyBtn}
+                  onPress={() => navigation.navigate('ConsultantPortfolioUpdate')}
                   activeOpacity={0.85}
                 >
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.projectCardTitle} numberOfLines={1}>
-                      {proj.assignment_details?.[0] ?? proj.assignment_type ?? 'Creative Project'}
-                    </Text>
-                    <Text style={s.projectCardClient}>From: {clientName}</Text>
-                    {proj.budget && <Text style={s.projectCardBudget}>₹{Number(proj.budget).toLocaleString('en-IN')}</Text>}
-                  </View>
-                  <View style={[s.statusBadge, { backgroundColor: badgeColor + '22' }]}>
-                    <Text style={[s.statusBadgeText, { color: badgeColor }]}>{proj.status.replace(/_/g, ' ').toUpperCase()}</Text>
-                  </View>
+                  <Plus size={16} color="#fff" />
+                  <Text style={s.emptyBtnText}>Add Artwork</Text>
                 </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
+              </View>
+            ) : (
+              <View style={s.productList}>
+                {products.map(p => {
+                  const coverUri = p.images?.[0] ?? null;
+                  const availLabel = getAvailabilityLabel(p);
+                  const availColor = getAvailabilityColor(p);
+                  return (
+                    <View key={p.id} style={s.productCard}>
+                      {/* Full-width image (Figma) */}
+                      {coverUri
+                        ? <Image source={{ uri: coverUri }} style={s.productImg} resizeMode="cover" />
+                        : <View style={[s.productImg, s.productImgPlaceholder]} />
+                      }
 
-        {/* Portfolio listing header */}
-        <View style={s.listHeader}>
-          <Text style={s.listTitle}>My Artwork Listings</Text>
-          <TouchableOpacity
-            style={s.addBtn}
-            onPress={() => navigation.navigate('AddEditProduct')}
-            activeOpacity={0.85}
-          >
-            <Plus size={16} color="#fff" />
-            <Text style={s.addBtnText}>Add</Text>
-          </TouchableOpacity>
-        </View>
+                      {/* Info */}
+                      <View style={s.productBody}>
+                        {/* Title + price row */}
+                        <View style={s.productTitleRow}>
+                          <Text style={s.productTitle} numberOfLines={1}>{p.title}</Text>
+                          <Text style={s.productPrice}>
+                            ₹{Number(p.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </Text>
+                        </View>
 
-        {loading ? (
-          <ActivityIndicator size="large" color={TEAL} style={{ marginTop: 40 }} />
-        ) : products.length === 0 ? (
-          <View style={s.emptyWrap}>
-            <Text style={s.emptyTitle}>No listings yet</Text>
-            <Text style={s.emptySub}>Add your first artwork to start selling</Text>
-            <TouchableOpacity
-              style={s.emptyBtn}
-              onPress={() => navigation.navigate('AddEditProduct')}
-              activeOpacity={0.85}
-            >
-              <Plus size={16} color="#fff" />
-              <Text style={s.emptyBtnText}>Add Artwork</Text>
-            </TouchableOpacity>
-          </View>
+                        <Text style={s.productCategory}>{p.category ?? 'Artwork'}</Text>
+
+                        <TouchableOpacity>
+                          <Text style={s.productBrief}>
+                            {p.description ? 'Artwork Brief...' : 'No description'}
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* Size + availability + edit pencil row */}
+                        <View style={s.productMetaRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={s.productSize}>Size: {p.size ?? 'Open'}</Text>
+                            <Text style={[s.availLabel, { color: availColor }]}>{availLabel}</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={s.actionBtn}
+                            onPress={() => navigation.navigate('AddEditProduct', { product: p })}
+                            activeOpacity={0.7}
+                          >
+                            <Edit3 size={16} color={NAVY} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={s.actionBtn}
+                            onPress={() => handleDelete(p)}
+                            activeOpacity={0.7}
+                          >
+                            <Trash2 size={16} color={colors.error} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Incoming purchase requests for the above listings */}
+            <View style={s.salesDivider} />
+            <ConsultantDashboard navigation={navigation} />
+          </>
         ) : (
-          <View style={s.productList}>
-            {products.map(p => {
-              const coverUri = p.images?.[0] ?? null;
-              const availLabel = getAvailabilityLabel(p);
-              const availColor = getAvailabilityColor(p);
-              return (
-                <View key={p.id} style={s.productCard}>
-                  {/* Image */}
-                  <View style={s.productImgWrap}>
-                    {coverUri
-                      ? <Image source={{ uri: coverUri }} style={s.productImg} resizeMode="cover" />
-                      : <View style={[s.productImg, s.productImgPlaceholder]} />
-                    }
-                  </View>
+          <>
+            {/* Things being worked on: active project/service assignments */}
+            <View style={s.listHeader}>
+              <Text style={s.listTitle}>Active Project Assignments</Text>
+            </View>
 
-                  {/* Info */}
-                  <View style={s.productInfo}>
-                    <Text style={s.productCategory}>{p.category ?? 'Artwork'}</Text>
-                    <Text style={s.productTitle} numberOfLines={2}>{p.title}</Text>
-                    <TouchableOpacity>
-                      <Text style={s.productBrief}>
-                        {p.description ? 'Artwork Brief...' : 'No description'}
-                      </Text>
-                    </TouchableOpacity>
-                    <Text style={s.productSize}>
-                      Size: {p.size ?? 'Open'}
-                    </Text>
-                    <Text style={s.productPrice}>
-                      ₹{Number(p.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </Text>
-                    {/* Availability label — Figma requirement */}
-                    <Text style={[s.availLabel, { color: availColor }]}>{availLabel}</Text>
-                  </View>
-
-                  {/* Edit pencil */}
-                  <View style={s.productActions}>
+            {projects.length === 0 ? (
+              <View style={s.emptyWrap}>
+                <Briefcase size={40} color="#D1D5DB" />
+                <Text style={s.emptyTitle}>No active projects yet</Text>
+                <Text style={s.emptySub}>Project and service assignments from clients will appear here</Text>
+              </View>
+            ) : (
+              <View style={s.inboxSection}>
+                {projects.map((proj: any) => {
+                  const clientName = (proj.profiles as any)?.name ?? 'Client';
+                  const STATUS_COLORS: Record<string, string> = {
+                    assigned: '#E87B35', advance_pending: '#F59E0B', in_progress: '#0D7F7A',
+                    review_1: '#6366F1', review_2: '#8B5CF6', final_review: '#EC4899',
+                    work_order_generated: '#3B82F6', work_order_accepted: '#10B981',
+                    advance_paid: '#14B8A6',
+                  };
+                  const badgeColor = STATUS_COLORS[proj.status] ?? '#9CA3AF';
+                  return (
                     <TouchableOpacity
-                      style={s.actionBtn}
-                      onPress={() => navigation.navigate('AddEditProduct', { product: p })}
-                      activeOpacity={0.7}
+                      key={proj.id}
+                      style={s.projectCard}
+                      onPress={() => navigation.navigate('Main', { screen: 'CreatorWorkorder', params: { project: proj } })}
+                      activeOpacity={0.85}
                     >
-                      <Edit3 size={16} color={colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.projectCardTitle} numberOfLines={1}>
+                          {proj.assignment_details?.[0] ?? proj.assignment_type ?? 'Creative Project'}
+                        </Text>
+                        <Text style={s.projectCardClient}>From: {clientName}</Text>
+                        {proj.budget && <Text style={s.projectCardBudget}>₹{Number(proj.budget).toLocaleString('en-IN')}</Text>}
+                      </View>
+                      <View style={[s.statusBadge, { backgroundColor: badgeColor + '22' }]}>
+                        <Text style={[s.statusBadgeText, { color: badgeColor }]}>{proj.status.replace(/_/g, ' ').toUpperCase()}</Text>
+                      </View>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={s.actionBtn}
-                      onPress={() => handleDelete(p)}
-                      activeOpacity={0.7}
-                    >
-                      <Trash2 size={16} color={colors.error} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
+                  );
+                })}
+              </View>
+            )}
+          </>
         )}
 
         <Text style={s.footer}>
@@ -327,17 +296,7 @@ const s = StyleSheet.create({
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, alignSelf: 'flex-start', marginLeft: 8 },
   statusBadgeText: { fontSize: 9, fontWeight: '700', fontFamily: fonts.heavy, letterSpacing: 0.3 },
 
-  header: {
-    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4,
-  },
-  tagline: { fontSize: 9, fontFamily: fonts.body, color: colors.textTertiary, letterSpacing: 0.5, marginBottom: 4 },
-  dashTitle: { fontSize: 36, fontWeight: '900', fontFamily: fonts.heavy, color: NAVY, lineHeight: 40 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  avatar: { width: 40, height: 40, borderRadius: 20 },
-  avatarFallback: { backgroundColor: TEAL, alignItems: 'center', justifyContent: 'center' },
-  avatarInitial: { fontSize: 16, fontWeight: '800', color: '#fff', fontFamily: fonts.heavy },
+  dashTitle: { fontSize: 28, fontWeight: '900', fontFamily: fonts.heavy, color: NAVY, lineHeight: 34, textAlign: 'center', marginTop: 6, marginBottom: 2 },
 
   // Toggle pills (Figma "Sales Dashboard | Project Dashboard")
   toggleRow: {
@@ -371,6 +330,8 @@ const s = StyleSheet.create({
     fontWeight: '800',
   },
 
+  salesDivider: { height: 1, backgroundColor: 'rgba(0,0,0,0.08)', marginVertical: 24 },
+
   scroll: { paddingHorizontal: 20, paddingBottom: 40 },
 
   listHeader: {
@@ -384,23 +345,26 @@ const s = StyleSheet.create({
   },
   addBtnText: { color: '#fff', fontSize: fontSizes.sm, fontWeight: '700', fontFamily: fonts.heavy },
 
-  productList: { gap: 0 },
+  productList: { gap: 16 },
   productCard: {
-    backgroundColor: '#fff', flexDirection: 'row', gap: 12,
-    paddingVertical: 14, paddingHorizontal: 4,
-    borderBottomWidth: 1, borderBottomColor: '#F0F2F8',
+    backgroundColor: '#fff', borderRadius: radii.xl, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+      android: { elevation: 2 },
+    }),
   },
-  productImgWrap: { borderRadius: 10, overflow: 'hidden' },
-  productImg: { width: 100, height: 90, borderRadius: 10 },
+  productImg: { width: '100%', height: 170 },
   productImgPlaceholder: { backgroundColor: '#E5E7EB' },
-  productInfo: { flex: 1, gap: 2 },
-  productCategory: { fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy, color: ORANGE, letterSpacing: 0.3 },
-  productTitle: { fontSize: fontSizes.base, fontWeight: '800', fontFamily: fonts.heavy, color: NAVY, lineHeight: 18 },
+  productBody: { padding: 14, gap: 3 },
+  productTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  productCategory: { fontSize: fontSizes.xs + 1, fontWeight: '700', fontFamily: fonts.heavy, color: ORANGE, letterSpacing: 0.3 },
+  productTitle: { flex: 1, fontSize: fontSizes.lg, fontWeight: '800', fontFamily: fonts.heavy, color: NAVY },
   productBrief: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: TEAL },
   productSize: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textTertiary },
-  productPrice: { fontSize: fontSizes.base, fontWeight: '800', fontFamily: fonts.heavy, color: NAVY, marginTop: 2 },
+  productPrice: { fontSize: fontSizes.lg, fontWeight: '800', fontFamily: fonts.heavy, color: NAVY },
   availLabel: { fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy, marginTop: 2 },
-  productActions: { justifyContent: 'center', gap: 8 },
+  productMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   actionBtn: {
     width: 32, height: 32, borderRadius: 8,
     backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center',

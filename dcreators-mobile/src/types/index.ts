@@ -22,16 +22,28 @@ export interface ConsultantProfile {
   user_id: string;
   display_name: string;
   code: string;
-  category: ConsultantCategory;
+  category: ConsultantCategory | null;
   subtitle: string | null;
   experience: string | null;
   expertise: string | null;
   bio: string | null;
   avatar_url: string | null;
   portfolio_images: string[] | null;
+  // Per-placement crops of the primary (most recent) artwork — see
+  // ImageCropModal for which screen reads which shape.
+  portfolio_card_image: string | null;
+  portfolio_banner_image: string | null;
   base_price: number | null;
   is_approved: boolean;
   is_active: boolean;
+  // KYC / banking — collected on the Create Creator's Account screen
+  institution_name: string | null;
+  aadhar_number: string | null;
+  pan_number: string | null;
+  bank_name: string | null;
+  ifsc_code: string | null;
+  bank_account_number: string | null;
+  terms_pdf_url: string | null;
   created_at: string;
   updated_at: string;
 }

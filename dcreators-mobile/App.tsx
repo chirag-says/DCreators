@@ -17,7 +17,7 @@ import RegisterScreen from './src/screens/RegisterScreen';
 import IntroScreen from './src/screens/IntroScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import CreatorProfileScreen from './src/screens/CreatorProfileScreen';
-import CreatorOnboarding from './src/screens/CreatorOnboarding';
+import CreateCreatorAccountScreen from './src/screens/CreateCreatorAccountScreen';
 import AssignProjectScreen from './src/screens/AssignProjectScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import FloatingQueryScreen from './src/screens/FloatingQueryScreen';
@@ -106,7 +106,16 @@ export default function App() {
       <SafeAreaProvider>
       <NavigationContainer>
         <StatusBar style="dark" />
-        <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#e8e8e8' } }} initialRouteName="Splash">
+        <Stack.Navigator
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: '#e8e8e8' },
+            gestureEnabled: true,
+            // iOS: allow swipe-back from anywhere on screen, not just the left edge
+            fullScreenGestureEnabled: true,
+          }}
+          initialRouteName="Splash"
+        >
           <Stack.Screen name="Splash" component={AnimatedSplashScreen} />
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
@@ -115,7 +124,7 @@ export default function App() {
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
           <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
           <Stack.Screen name="Intro" component={IntroScreen} />
-          <Stack.Screen name="CreatorOnboarding" component={CreatorOnboarding} />
+          <Stack.Screen name="CreateCreatorAccount" component={CreateCreatorAccountScreen} />
           <Stack.Screen name="ClientOnboarding" component={ClientOnboardingScreen} />
           
           {/* Main Logged-In Flow with Fixed Bottom Navigation */}

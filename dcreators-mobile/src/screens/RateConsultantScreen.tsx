@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Zap, MessageSquare, Gem, Star } from 'lucide-react-native';
+import FigmaBottomBar from '../components/FigmaBottomBar';
 import { supabase } from '../lib/supabase';
 import { updateProjectStatus } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
@@ -207,26 +208,7 @@ export default function RateConsultantScreen({ navigation, route }: any) {
 
       </ScrollView>
 
-      {/* Bottom nav */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bottomBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.bottomBtnLabel}>← Back</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.bottomHomeBtn}
-          onPress={() => navigation.navigate('Main', { screen: 'Dashboard' })}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.bottomHomeBtnLabel}>🏠  Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.bottomBtn}
-          onPress={() => navigation.navigate('Main', { screen: 'Profile' })}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.bottomBtnLabel}>👤 Profile</Text>
-        </TouchableOpacity>
-      </View>
+      <FigmaBottomBar navigation={navigation} activeTab="profile" />
     </SafeAreaView>
   );
 }

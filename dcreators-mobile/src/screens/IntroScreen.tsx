@@ -10,7 +10,6 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
@@ -22,8 +21,6 @@ const CLIENT_BG   = '#E8ECF4';  // muted blue-gray tint for icon zone
 const CONSULT_BG  = '#FDF0E4';  // warm peach tint for icon zone
 const CLIENT_PILL = '#1A2560';  // dark navy pill
 const CONSULT_PILL = '#C84B0F'; // burnt orange pill
-const CLIENT_ICON  = '#1A2560';
-const CONSULT_ICON = '#C84B0F';
 
 // ─────────────────────────────────────────────────────────────
 export default function IntroScreen({ navigation, route }: any) {
@@ -32,10 +29,17 @@ export default function IntroScreen({ navigation, route }: any) {
   function handleRole(role: 'viewer' | 'creator') {
     if (role === 'creator') {
       setRole('consultant');
-      if (consultantProfile) {
-        navigation.reset({ index: 0, routes: [{ name: 'Main', params: { screen: 'Dashboard' } }] });
+      if (!consultantProfile) {
+        navigation.navigate('CreateCreatorAccount');
+      } else if (!consultantProfile.is_approved) {
+        // Resume onboarding at the step they left off on.
+        if (!consultantProfile.category) {
+          navigation.navigate('ConsultantServicePricing', { fromOnboarding: true });
+        } else {
+          navigation.navigate('ConsultantPortfolioUpdate', { fromOnboarding: true });
+        }
       } else {
-        navigation.navigate('CreatorOnboarding');
+        navigation.reset({ index: 0, routes: [{ name: 'Main', params: { screen: 'Dashboard' } }] });
       }
     } else {
       setRole('client');
@@ -79,7 +83,11 @@ export default function IntroScreen({ navigation, route }: any) {
         >
           {/* Icon zone — blue-gray tint */}
           <View style={[styles.iconZone, { backgroundColor: CLIENT_BG }]}>
-            <MaterialCommunityIcons name="account-search" size={72} color={CLIENT_ICON} />
+            <Image
+              source={require('../../assets/client.png')}
+              style={styles.roleIcon}
+              resizeMode="contain"
+            />
             <View style={[styles.pill, { backgroundColor: CLIENT_PILL }]}>
               <Text style={styles.pillText}>CLIENT PORTAL</Text>
             </View>
@@ -101,7 +109,11 @@ export default function IntroScreen({ navigation, route }: any) {
         >
           {/* Icon zone — warm peach tint */}
           <View style={[styles.iconZone, { backgroundColor: CONSULT_BG }]}>
-            <MaterialCommunityIcons name="pencil-ruler" size={72} color={CONSULT_ICON} />
+            <Image
+              source={require('../../assets/consultant.png')}
+              style={styles.roleIcon}
+              resizeMode="contain"
+            />
             <View style={[styles.pill, { backgroundColor: CONSULT_PILL }]}>
               <Text style={styles.pillText}>CONSULTANT PORTAL</Text>
             </View>
@@ -220,6 +232,10 @@ const styles = StyleSheet.create({
     paddingBottom: spacing['2xl'],
     alignItems: 'center',
     gap: spacing.xl,
+  },
+  roleIcon: {
+    width: 72,
+    height: 72,
   },
 
   // Pill label
