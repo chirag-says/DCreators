@@ -2,9 +2,15 @@
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell, CheckCircle, FileText, ChevronLeft, Trash2, CreditCard, AlertCircle, Inbox } from 'lucide-react-native';
-import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import {
+  fetchNotifications as fetchNotificationsService,
+  markNotificationRead,
+  markAllNotificationsRead,
+  clearAllNotifications,
+} from '../lib/notifications';
+import type { Notification } from '../types';
 
 
 const ICON_MAP: Record<string, { icon: any; color: string }> = {
@@ -16,45 +22,40 @@ const ICON_MAP: Record<string, { icon: any; color: string }> = {
 
 export default function NotificationsScreen({ navigation }: any) {
   const profile = useAuthStore((s) => s.profile);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => { fetchNotifications(); }, []);
-
-  async function fetchNotifications() {
+  const loadNotifications = useCallback(async () => {
     if (!profile?.id) {
       setLoading(false);
       return;
     }
     try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', profile.id)
-        .order('created_at', { ascending: false })
-        .limit(30);
-      if (!error && data) setNotifications(data);
+      const data = await fetchNotificationsService(profile.id);
+      setNotifications(data);
     } catch {}
     finally { setLoading(false); setRefreshing(false); }
-  }
+  }, [profile?.id]);
+
+  useEffect(() => { loadNotifications(); }, [loadNotifications]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchNotifications();
-  }, []);
+    loadNotifications();
+  }, [loadNotifications]);
 
   async function markAllRead() {
     if (!profile?.id || notifications.length === 0) return;
     try {
-      await supabase.from('notifications').update({ is_read: true }).eq('user_id', profile.id).eq('is_read', false);
+      await markAllNotificationsRead(profile.id);
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     } catch {}
   }
 
   async function markRead(id: string) {
     try {
-      await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+      await markNotificationRead(id);
       setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
     } catch {}
   }
@@ -62,7 +63,7 @@ export default function NotificationsScreen({ navigation }: any) {
   async function clearAll() {
     if (!profile?.id) return;
     try {
-      await supabase.from('notifications').delete().eq('user_id', profile.id);
+      await clearAllNotifications(profile.id);
       setNotifications([]);
     } catch {}
   }

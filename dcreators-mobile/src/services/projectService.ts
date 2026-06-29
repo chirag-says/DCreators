@@ -125,6 +125,81 @@ export async function fetchProjectById(projectId: string): Promise<ProjectWithCo
   return data as ProjectWithConsultant;
 }
 
+/**
+ * Create a new project (draft or direct-hire assigned) and return the inserted row.
+ */
+export async function createProject(payload: Record<string, unknown>): Promise<Project> {
+  const { data, error } = await supabase
+    .from('projects')
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as Project;
+}
+
+/** Fetch a consultant's active project assignments for the dashboard, with client name+avatar joined. */
+export async function fetchConsultantDashboardProjects(consultantUserId: string): Promise<ProjectWithClient[]> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*, profiles!client_id(name, avatar_url)')
+    .eq('consultant_id', consultantUserId)
+    .in('status', CONSULTANT_ACTIVE_STATUSES)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[ProjectService] fetchConsultantDashboardProjects error:', error.message);
+    return [];
+  }
+
+  return (data ?? []) as ProjectWithClient[];
+}
+
+/** Statuses shown as "ongoing" on the consultant project-management screen. */
+const MANAGEMENT_ONGOING_STATUSES: ProjectStatus[] = [
+  'work_order_accepted', 'in_progress', 'review_1', 'review_2',
+  'final_review', 'final_approved', 'balance_pending', 'balance_paid',
+];
+
+/** Fetch a consultant's ongoing projects for the project-management screen, with client name joined. */
+export async function fetchConsultantOngoingProjects(consultantUserId: string): Promise<ProjectWithClient[]> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*, client:profiles!client_id(name)')
+    .eq('consultant_id', consultantUserId)
+    .in('status', MANAGEMENT_ONGOING_STATUSES)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[ProjectService] fetchConsultantOngoingProjects error:', error.message);
+    return [];
+  }
+
+  return (data ?? []) as ProjectWithClient[];
+}
+
+/** Fetch a consultant's recently delivered/completed projects, with client name joined. */
+export async function fetchConsultantDeliveredProjects(consultantUserId: string, limit = 10): Promise<ProjectWithClient[]> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*, client:profiles!client_id(name)')
+    .eq('consultant_id', consultantUserId)
+    .in('status', ['delivered', 'completed'])
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('[ProjectService] fetchConsultantDeliveredProjects error:', error.message);
+    return [];
+  }
+
+  return (data ?? []) as ProjectWithClient[];
+}
+
 // ─── Status Machine ──────────────────────────────────────────
 
 /**
@@ -307,6 +382,29 @@ export async function fetchProjectSubmissions(projectId: string): Promise<Submis
 }
 
 /**
+ * Fetch the most recent submission for a project (latest review round).
+ * Returns null if no submission exists yet.
+ */
+export async function fetchLatestSubmission(projectId: string): Promise<Submission | null> {
+  const { data, error } = await supabase
+    .from('submissions')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error) {
+    if (error.code !== 'PGRST116') {
+      console.log('[ProjectService] fetchLatestSubmission:', error.message);
+    }
+    return null;
+  }
+
+  return data as Submission;
+}
+
+/**
  * Create a new submission for a project round.
  */
 export async function createSubmission(submission: {
@@ -338,7 +436,7 @@ export async function updateSubmissionFeedback(
     feedback_colour?: boolean;
     feedback_concept?: boolean;
     feedback_design_look?: boolean;
-    feedback_text?: string;
+    feedback_text?: string | null;
     selected_option?: number;
   },
 ): Promise<void> {
@@ -346,6 +444,25 @@ export async function updateSubmissionFeedback(
     .from('submissions')
     .update(feedback)
     .eq('id', submissionId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Send a collaboration request from one consultant to another on a project.
+ */
+export async function createCollaborationRequest(request: {
+  project_id: string;
+  requester_id: string;
+  collaborator_id: string;
+}): Promise<void> {
+  const { error } = await supabase.from('collaboration_requests').insert({
+    ...request,
+    status: 'pending',
+    created_at: new Date().toISOString(),
+  });
 
   if (error) {
     throw new Error(error.message);

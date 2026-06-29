@@ -2,10 +2,17 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Platform, ScrollView, KeyboardAvoidingView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Send, Paperclip, Check, X } from 'lucide-react-native';
-import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 import { acceptBidCandidate, declineBidCandidate } from '../services/bidService';
+import {
+  fetchMessages as fetchMessagesService,
+  sendMessage,
+  subscribeToMessages,
+  unsubscribeFromMessages,
+  type Message,
+  type MessageScopeColumn,
+} from '../services/messageService';
 
 export default function ChatScreen({ navigation, route }: any) {
   const project = route?.params?.project;
@@ -15,13 +22,13 @@ export default function ChatScreen({ navigation, route }: any) {
   const quotedPrice: number | undefined = route?.params?.quotedPrice;
   const isBidMode = !!bidCandidateId;
   const entityId = isBidMode ? bidCandidateId : project?.id;
-  const entityColumn = isBidMode ? 'bid_candidate_id' : 'project_id';
+  const entityColumn: MessageScopeColumn = isBidMode ? 'bid_candidate_id' : 'project_id';
 
   const otherName = route?.params?.otherName || 'Participant';
   const profile = useAuthStore((s) => s.profile);
   const currentRole = useAuthStore((s) => s.currentRole);
 
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -31,31 +38,19 @@ export default function ChatScreen({ navigation, route }: any) {
   useEffect(() => {
     fetchMessages();
     // Subscribe to new messages via realtime
-    const channel = supabase
-      .channel(`messages:${entityColumn}:${entityId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `${entityColumn}=eq.${entityId}`,
-      }, (payload: any) => {
-        setMessages((prev) => [...prev, payload.new]);
-        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-      })
-      .subscribe();
+    const channel = subscribeToMessages(entityColumn, entityId, (message) => {
+      setMessages((prev) => [...prev, message]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    });
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { unsubscribeFromMessages(channel); };
   }, []);
 
   async function fetchMessages() {
     if (!entityId) { setLoading(false); return; }
     try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq(entityColumn, entityId)
-        .order('created_at', { ascending: true });
-      if (!error && data) setMessages(data);
+      const data = await fetchMessagesService(entityColumn, entityId);
+      setMessages(data);
     } catch {}
     finally {
       setLoading(false);
@@ -69,14 +64,9 @@ export default function ChatScreen({ navigation, route }: any) {
     setInput('');
     setSending(true);
     try {
-      const { error } = await supabase.from('messages').insert({
-        [entityColumn]: entityId,
-        sender_id: profile.id,
-        text,
-      });
-      if (error) console.log('[Chat] Send error:', error.message);
+      await sendMessage({ scopeColumn: entityColumn, scopeId: entityId, senderId: profile.id, text });
       // Message will appear via realtime subscription
-    } catch {}
+    } catch (e: any) { console.log('[Chat] Send error:', e.message); }
     finally { setSending(false); }
   }
 
