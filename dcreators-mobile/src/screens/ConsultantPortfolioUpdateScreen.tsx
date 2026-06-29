@@ -250,7 +250,7 @@ export default function ConsultantPortfolioUpdateScreen({ navigation, route }: a
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <Text style={s.heroTitle}>{fromOnboarding ? 'Build Your\nCreative\nPortfolio' : 'Update\nCreative\nPortfolio'}</Text>
-        {fromOnboarding && <Text style={s.stepHint}>Step 3 of 3 — the last step before your profile goes live.</Text>}
+        {fromOnboarding && <Text style={s.stepHint}>Step 4 of 4 — the last step before your profile goes live.</Text>}
         <Text style={s.heroSub}>
           Upload your original five Artworks/ Craftworks/ Photographs to showcase your unique style and attract high-tier clients.
         </Text>

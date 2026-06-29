@@ -33,8 +33,12 @@ export default function IntroScreen({ navigation, route }: any) {
         navigation.navigate('CreateCreatorAccount');
       } else if (!consultantProfile.is_approved) {
         // Resume onboarding at the step they left off on.
+        const hasCategoryDetails = consultantProfile.category_details
+          && Object.keys(consultantProfile.category_details).length > 0;
         if (!consultantProfile.category) {
           navigation.navigate('ConsultantServicePricing', { fromOnboarding: true });
+        } else if (!hasCategoryDetails) {
+          navigation.navigate('ConsultantCategoryDetails', { fromOnboarding: true });
         } else {
           navigation.navigate('ConsultantPortfolioUpdate', { fromOnboarding: true });
         }

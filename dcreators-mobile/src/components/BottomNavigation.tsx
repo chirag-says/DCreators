@@ -5,12 +5,13 @@
  * Style: white background, navy active, gray inactive, rounded top border
  *
  * Tab visibility depends on role:
- *   - client:     HOME | SEARCH | HISTORY | PROFILE
- *   - consultant: HOME | SEARCH | PROFILE
+ *   - client:     HOME | SEARCH | ACTIVITY | HISTORY | SHOP
+ *   - consultant: HOME | SEARCH | BIDS | PROJECTS | SALES
  *
- * Note: consultant Home (Dashboard tab) already renders CreatorDashboardScreen,
- * which has its own Sales Dashboard / Project Dashboard toggle — so there is no
- * separate "SALES" tab here (it would just duplicate Home and drop the tab bar).
+ * Neither role has a PROFILE tab — the avatar in TopHeader already opens
+ * the user's own profile directly, so a duplicate tab isn't needed. Service
+ * Pricing and Update Portfolio live inside the profile screen / sidebar menu
+ * instead of the bottom nav, since they're occasional edits, not daily use.
  *
  * No BACK tab — native iOS/Android swipe-back gesture (and the hardware/edge
  * swipe) handles backwards navigation; a dedicated button duplicated that.
@@ -20,7 +21,7 @@ import {
   View, TouchableOpacity, Text, StyleSheet, Platform, LayoutAnimation, UIManager,
 } from 'react-native';
 import {
-  Home, Search, User, Clock,
+  Home, Search, ShoppingBag, Clock, ClipboardList, FileText, Briefcase, TrendingUp,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -55,14 +56,17 @@ export default function BottomNavigation({ state, navigation: tabNavigation }: a
   const clientTabs: TabDef[] = [
     { name: 'Dashboard', label: 'HOME',   Icon: Home },
     { name: 'Search',    label: 'SEARCH', Icon: Search },
+    { name: 'MyActivity', label: 'ACTIVITY', Icon: ClipboardList },
     { name: 'History',   label: 'HISTORY',Icon: Clock },
-    { name: 'EditProfile', label: 'PROFILE', Icon: User },
+    { name: 'Shop',      label: 'SHOP',   Icon: ShoppingBag },
   ];
 
   const consultantTabs: TabDef[] = [
-    { name: 'Dashboard', label: 'HOME',   Icon: Home },
-    { name: 'Search',    label: 'SEARCH', Icon: Search },
-    { name: 'EditConsultantProfile', label: 'PROFILE', Icon: User },
+    { name: 'Dashboard', label: 'HOME',     Icon: Home },
+    { name: 'Search',    label: 'SEARCH',   Icon: Search },
+    { name: 'ConsultantBidInbox', label: 'BIDS', Icon: FileText },
+    { name: 'ConsultantProjectManagement', label: 'PROJECTS', Icon: Briefcase },
+    { name: 'ConsultantEarningsHistory', label: 'SALES', Icon: TrendingUp },
   ];
 
   const tabs = currentRole === 'consultant' ? consultantTabs : clientTabs;

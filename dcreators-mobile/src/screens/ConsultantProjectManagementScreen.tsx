@@ -14,14 +14,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ArrowLeft, MoreVertical, Edit3, ChevronLeft, ChevronRight,
-  Plus, Save, Bell,
+  MoreVertical, Edit3, ChevronLeft, ChevronRight,
+  Plus, Save,
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import type { Project } from '../types';
-import FigmaBottomBar from '../components/FigmaBottomBar';
+import TopHeader from '../components/TopHeader';
 
 const NAVY   = '#1B3A5C';
 const TEAL   = '#3D9B8F';
@@ -65,7 +65,47 @@ export default function ConsultantProjectManagementScreen({ navigation }: any) {
       .map(d => new Date(d!).getDate())
   );
 
-  useEffect(() => { fetchProjects(); }, []);
+  // Consultant-managed blackout days (vacation, already committed elsewhere) —
+  // 'YYYY-MM-DD' keys, tap a day below to toggle.
+  const [blockedDates, setBlockedDates] = useState<Set<string>>(new Set());
+
+  useEffect(() => { fetchProjects(); fetchBlockedDates(); }, []);
+
+  async function fetchBlockedDates() {
+    if (!consultantProfile?.id) return;
+    try {
+      const { data } = await supabase
+        .from('consultant_blocked_dates')
+        .select('blocked_date')
+        .eq('consultant_id', consultantProfile.id);
+      setBlockedDates(new Set((data ?? []).map((row: any) => row.blocked_date)));
+    } catch {}
+  }
+
+  function dateKey(y: number, m: number, d: number) {
+    return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
+  async function toggleBlockedDate(day: number) {
+    if (!consultantProfile?.id) return;
+    const key = dateKey(calYear, calMonth, day);
+    const isBlocked = blockedDates.has(key);
+    try {
+      if (isBlocked) {
+        await supabase.from('consultant_blocked_dates')
+          .delete()
+          .eq('consultant_id', consultantProfile.id)
+          .eq('blocked_date', key);
+        setBlockedDates(prev => { const next = new Set(prev); next.delete(key); return next; });
+      } else {
+        await supabase.from('consultant_blocked_dates')
+          .insert({ consultant_id: consultantProfile.id, blocked_date: key });
+        setBlockedDates(prev => new Set(prev).add(key));
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Could not update that date.');
+    }
+  }
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -134,15 +174,7 @@ export default function ConsultantProjectManagementScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <View style={s.header}>
-        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <ArrowLeft size={18} color={NAVY} />
-        </TouchableOpacity>
-        <Text style={s.tagline}>HIRE CREATIVES. BUY ART. BUILD IDEAS</Text>
-        <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('Notifications')} activeOpacity={0.7}>
-          <Bell size={18} color={NAVY} />
-        </TouchableOpacity>
-      </View>
+      <TopHeader />
 
       <ScrollView
         contentContainerStyle={s.scroll}
@@ -231,20 +263,31 @@ export default function ConsultantProjectManagementScreen({ navigation }: any) {
             {DAYS.map(d => <Text key={d} style={s.calDayLabel}>{d}</Text>)}
           </View>
           <View style={s.calGrid}>
-            {calCells.map((day, idx) => (
-              <View key={idx} style={s.calCell}>
-                {day && (
-                  <>
-                    <Text style={[
-                      s.calDay,
-                      day === today && s.calDayToday,
-                    ]}>{day}</Text>
-                    {milestoneDates.has(day) && <View style={s.calDot} />}
-                  </>
-                )}
-              </View>
-            ))}
+            {calCells.map((day, idx) => {
+              const isBlocked = day ? blockedDates.has(dateKey(calYear, calMonth, day)) : false;
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  style={s.calCell}
+                  activeOpacity={day ? 0.7 : 1}
+                  disabled={!day}
+                  onPress={() => day && toggleBlockedDate(day)}
+                >
+                  {day && (
+                    <>
+                      <Text style={[
+                        s.calDay,
+                        day === today && s.calDayToday,
+                        isBlocked && s.calDayBlocked,
+                      ]}>{day}</Text>
+                      {milestoneDates.has(day) && <View style={s.calDot} />}
+                    </>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
+          <Text style={s.calHint}>Tap a day to mark yourself unavailable (vacation, already booked elsewhere).</Text>
         </View>
 
         {/* Add Project */}
@@ -309,17 +352,12 @@ export default function ConsultantProjectManagementScreen({ navigation }: any) {
         </View>
 
       </ScrollView>
-      <FigmaBottomBar navigation={navigation} activeTab="sales" />
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
-  backBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  tagline: { fontSize: 9, fontFamily: fonts.body, color: colors.textTertiary, letterSpacing: 0.5 },
-  iconBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 20, paddingBottom: 60 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12, marginBottom: 14 },
   sectionTitle: { fontSize: fontSizes.xl, fontWeight: '800', fontFamily: fonts.heavy, color: NAVY },
@@ -352,7 +390,9 @@ const s = StyleSheet.create({
   calCell: { width: `${100/7}%`, alignItems: 'center', paddingVertical: 6 },
   calDay: { fontSize: fontSizes.sm, fontFamily: fonts.body, color: colors.textPrimary, textAlign: 'center' },
   calDayToday: { backgroundColor: NAVY, color: '#fff', borderRadius: 14, width: 26, height: 26, lineHeight: 26, textAlign: 'center', fontWeight: '700', fontFamily: fonts.heavy },
+  calDayBlocked: { backgroundColor: '#E5E7EB', color: colors.textTertiary, borderRadius: 14, width: 26, height: 26, lineHeight: 26, textAlign: 'center' },
   calDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: ORANGE, marginTop: 2 },
+  calHint: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textTertiary, textAlign: 'center', marginTop: 10 },
   // Add project
   addProjectCard: { backgroundColor: '#fff', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: colors.borderCard },
   addProjectHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },

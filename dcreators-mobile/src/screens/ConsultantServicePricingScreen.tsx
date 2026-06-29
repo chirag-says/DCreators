@@ -24,8 +24,8 @@ const TEAL = '#3D9B8F';
 const ORANGE = '#E87B35';
 const BG = '#EDF1F5';
 
-type Category = 'Designer' | 'Photographer' | 'Sculptor' | 'Artisan';
-const CATEGORIES: Category[] = ['Designer', 'Photographer', 'Sculptor', 'Artisan'];
+type Category = 'Designer' | 'Photographer' | 'Videographer' | 'Sculptor' | 'Artisan';
+const CATEGORIES: Category[] = ['Designer', 'Photographer', 'Videographer', 'Sculptor', 'Artisan'];
 
 const SERVICE_ITEMS: Record<Category, string[]> = {
   Designer: [
@@ -52,6 +52,15 @@ const SERVICE_ITEMS: Record<Category, string[]> = {
     'Product photography',
     'Wedding photography',
     'Wildlife photography',
+  ],
+  Videographer: [
+    'Corporate video',
+    'Drone coverage',
+    'Event coverage',
+    'Music video',
+    'Same-day edit',
+    'Social media reel',
+    'Wedding film',
   ],
   Sculptor: [
     'Abstract sculpture',
@@ -80,15 +89,17 @@ const SERVICE_ITEMS: Record<Category, string[]> = {
 const CATEGORY_DB_VALUE: Record<Category, string> = {
   Designer: 'designer',
   Photographer: 'photographer',
+  Videographer: 'videographer',
   Sculptor: 'sculptor',
   Artisan: 'artisan',
 };
 
-// Headline used to seed `expertise` — keep the keywords ('photo', 'design',
-// 'art', 'craft') that ExploreConsultantsScreen/SearchScreen match against.
+// Headline used to seed `expertise` — keep the keywords ('photo', 'video',
+// 'design', 'art', 'craft') that Search matches against.
 const CATEGORY_HEADLINE: Record<Category, string> = {
   Designer: 'Design',
   Photographer: 'Photography',
+  Videographer: 'Videography',
   Sculptor: 'Sculpture & Art',
   Artisan: 'Traditional Craft',
 };
@@ -169,7 +180,7 @@ export default function ConsultantServicePricingScreen({ navigation, route }: an
 
       if (submit) {
         if (fromOnboarding) {
-          navigation.navigate('ConsultantPortfolioUpdate', { fromOnboarding: true });
+          navigation.navigate('ConsultantCategoryDetails', { fromOnboarding: true });
         } else {
           Alert.alert('Submitted ✅', 'Your consultancy fees have been submitted for review.');
           setMode('view');
@@ -199,7 +210,7 @@ export default function ConsultantServicePricingScreen({ navigation, route }: an
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <Text style={s.heroTitle}>{fromOnboarding ? 'Set Up\nConsultancy\nServices' : 'Update\nConsultancy\nServices'}</Text>
         {fromOnboarding ? (
-          <Text style={s.stepHint}>Step 2 of 3 — choose your category and set your fees.</Text>
+          <Text style={s.stepHint}>Step 2 of 4 — choose your category and set your fees.</Text>
         ) : (
           <View style={{ marginBottom: 14 }} />
         )}

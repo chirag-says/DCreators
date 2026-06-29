@@ -6,7 +6,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
-import type { Project, ConsultantProfile, ShopProduct } from './index';
+import type { Project, ConsultantProfile, ShopProduct, BidRequest } from './index';
 
 // ─── Dashboard Creator View Model ────────────────────────────
 export interface CreatorCardViewModel {
@@ -38,7 +38,6 @@ export type RootStackParamList = {
   OTPVerification: { email: string };
   Intro: undefined;
   CreateCreatorAccount: undefined;
-  ClientOnboarding: undefined;
 
   // Main tab navigator
   Main: NavigatorScreenParams<MainTabParamList>;
@@ -76,29 +75,39 @@ export type RootStackParamList = {
   CreatorDashboard: undefined;
 
   // Phase 5 — Consultant Management
-  ConsultantEarningsHistory: undefined;
   ConsultantServicePricing: { fromOnboarding?: boolean } | undefined;
-  ConsultantProjectManagement: undefined;
+  // owner_role: CONSULTANT  previous: ConsultantServicePricing (onboarding)  next: ConsultantPortfolioUpdate
+  ConsultantCategoryDetails: { fromOnboarding?: boolean } | undefined;
 
   // Phase 6 — Remaining Figma Screens
-  ExploreConsultants: undefined;
   HireConsultant: { consultant?: any } | undefined;
+  // owner_role: CLIENT  previous: CreatorProfile "Hire Now"  next: Main/CreatorWorkorder (status: assigned)
+  BookConsultant: { consultant: CreatorCardViewModel };
   ConsultantPortfolioUpdate: { fromOnboarding?: boolean } | undefined;
   PaymentConfirmed: { transactionId?: string; amountPaid?: number; paidAt?: string; projectId?: string } | undefined;
   ArtistSalesRequestDetail: { order: any };
+
+  // Phase 7 — Bidding with priority list + negotiation chat
+  // owner_role: CLIENT  next: BidCandidates
+  CreateBid: undefined;
+  // owner_role: CLIENT  previous: CreateBid  next: BidStatus
+  BidCandidates: { bidRequest: BidRequest };
+  // owner_role: CLIENT  previous: BidCandidates  next: Chat (negotiating) | Main/CreatorWorkorder (accepted)
+  BidStatus: { bidRequestId: string };
 
   Filter: undefined;
   PortfolioGallery: { images: string[]; initialIndex?: number };
 
   // Full-screen features
   Notifications: undefined;
-  Chat: { project: Project; otherName: string };
+  Chat:
+    | { project: Project; otherName: string }
+    | { bidCandidateId: string; otherName: string; quotedPrice: number };
   Invoice: { project: Project };
   SavedCreators: undefined;
   RatingReview: { project: Project };
   Shop: undefined;
   ProductDetails: { product: ShopProduct & { consultant_profiles?: { display_name: string; code: string } } };
-  Menu: undefined;
   MessagesList: undefined;
   MyProducts: undefined;
   AddEditProduct: { product?: ShopProduct } | undefined;
@@ -115,6 +124,14 @@ export type MainTabParamList = {
   AssignProject: { consultant?: CreatorCardViewModel } | undefined;
   FloatingQuery: undefined;
   CreatorWorkorder: { project: Project };
+  // owner_role: CLIENT  bottom-nav tab: bidding entry point + active projects/bids
+  MyActivity: undefined;
+  // owner_role: CONSULTANT  bottom-nav tab: incoming bid requests (Accept/Negotiate/Reject)
+  ConsultantBidInbox: undefined;
+  // owner_role: CONSULTANT  bottom-nav tab: ongoing/delivered service projects + calendar
+  ConsultantProjectManagement: undefined;
+  // owner_role: CONSULTANT  bottom-nav tab: artwork sales earnings/history
+  ConsultantEarningsHistory: undefined;
 };
 
 // ─── Screen Props Helpers ────────────────────────────────────

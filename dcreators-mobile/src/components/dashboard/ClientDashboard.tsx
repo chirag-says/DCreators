@@ -1,4 +1,4 @@
-// ============================================
+﻿// ============================================
 // ClientDashboard — "Explore Creative Consultant's Portfolio"
 // Role: CLIENT | Figma: "Explore Creative Consultant's Portfolio.png"
 // 5 creator browse sections + active projects summary
@@ -11,7 +11,6 @@ import {
   Image,
   ScrollView,
   StyleSheet,
-  ImageBackground,
   RefreshControl,
   TouchableOpacity,
 } from 'react-native';
@@ -20,14 +19,9 @@ import { ChevronRight } from 'lucide-react-native';
 import TopHeader from '../TopHeader';
 import SkeletonBar from '../common/SkeletonBar';
 import FeaturedCreatorCard from './FeaturedCreatorCard';
-import ClientProjectRow from './ClientProjectRow';
 import { useCreators } from '../../hooks/useCreators';
-import { useClientProjects } from '../../hooks/useProjects';
-import { useAuthStore } from '../../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii } from '../../styles/theme';
 import type { CreatorCardViewModel, MainTabScreenProps } from '../../types/navigation';
-import type { ProjectWithConsultant } from '../../services/projectService';
-import { RemoteAssets } from '../../lib/assets';
 
 // ─── Figma color tokens ──────────────────────────────────────
 const NAVY = '#1B3A5C';
@@ -54,14 +48,12 @@ const CATEGORY_TABS = [
 ] as const;
 
 export default function ClientDashboard({ navigation }: ClientDashboardProps) {
-  const profile = useAuthStore((s) => s.profile);
   const [activeCat, setActiveCat] = React.useState<string | null>(null);
   const { creators, loading: creatorsLoading, error: creatorsError, refresh: refreshCreators } = useCreators();
-  const { projects: clientProjects, loading: projectsLoading, refresh: refreshProjects } = useClientProjects(profile?.id);
 
   const onRefresh = useCallback(async () => {
-    await Promise.all([refreshCreators(), refreshProjects()]);
-  }, [refreshCreators, refreshProjects]);
+    await refreshCreators();
+  }, [refreshCreators]);
 
   function getCreatorsForSection(section: typeof SECTIONS[0]): CreatorCardViewModel[] {
     if (!section.category) {
@@ -80,23 +72,9 @@ export default function ClientDashboard({ navigation }: ClientDashboardProps) {
     navigation.navigate('CreatorProfile', { creator });
   }
 
-  function goToWorkorder(project: ProjectWithConsultant) {
-    const s = project.status;
-    // Spec-driven routing based on current project state
-    if (s === 'advance_pending') {
-      // Client needs to pay advance
-      (navigation as any).navigate('Payment', { project, paymentType: 'advance' });
-    } else if (s === 'advance_paid') {
-      // Client should generate work order
-      (navigation as any).navigate('GenerateWorkOrder', { project, txnId: '', payAmount: project.final_offer ?? project.budget });
-    } else {
-      // in_progress, review_1, review_2, final_review, final_approved, balance_pending, balance_paid, delivered, completed
-      (navigation as any).navigate('ClientWorkorder', { project });
-    }
-  }
 
   return (
-    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
+    <View style={styles.bg}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <TopHeader />
         <ScrollView
@@ -131,19 +109,6 @@ export default function ClientDashboard({ navigation }: ClientDashboardProps) {
             {creatorsError && (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorText}>⚠ {creatorsError}</Text>
-              </View>
-            )}
-
-            {/* Client Active Projects */}
-            {clientProjects.length > 0 && (
-              <View style={styles.projectsSection}>
-                <View style={styles.projectsHeader}>
-                  <Text style={styles.projectsTitle}>My Active Projects</Text>
-                  <Text style={styles.projectsCount}>{clientProjects.length}</Text>
-                </View>
-                {clientProjects.map((proj) => (
-                  <ClientProjectRow key={proj.id} project={proj} onPress={goToWorkorder} />
-                ))}
               </View>
             )}
 
@@ -190,24 +155,6 @@ export default function ClientDashboard({ navigation }: ClientDashboardProps) {
                 })
             )}
 
-            {/* ── Dashboard toggle buttons (Figma chrome) ─── */}
-            <View style={styles.dashBtnRow}>
-              <TouchableOpacity
-                style={styles.dashBtn}
-                activeOpacity={0.85}
-                onPress={() => navigation.navigate('Shop')}
-              >
-                <Text style={styles.dashBtnText}>Sales Dashboard</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.dashBtn}
-                activeOpacity={0.85}
-                onPress={() => navigation.navigate('History')}
-              >
-                <Text style={styles.dashBtnText}>Project Dashboard</Text>
-              </TouchableOpacity>
-            </View>
-
             {/* ── Footer attribution ───────────────────── */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>
@@ -228,7 +175,7 @@ export default function ClientDashboard({ navigation }: ClientDashboardProps) {
           </View>
         </ScrollView>
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 }
 
@@ -290,20 +237,6 @@ const styles = StyleSheet.create({
   },
   errorText: { color: '#DC2626', fontSize: 13, fontFamily: fonts.body },
 
-  // ── Projects section ──────────────────────────
-  projectsSection: {
-    marginBottom: 16, backgroundColor: 'rgba(255,255,255,0.65)',
-    borderRadius: 12, padding: 14, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
-  },
-  projectsHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12,
-  },
-  projectsTitle: { fontSize: 15, fontWeight: '700', color: '#1F2937' },
-  projectsCount: {
-    fontSize: 13, fontWeight: '700', color: '#6B7280',
-    backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10,
-  },
-
   // ── Creator sections (light header + single featured card) ────
   sectionWrap: {
     gap: spacing.sm,
@@ -325,19 +258,6 @@ const styles = StyleSheet.create({
   cardsScrollContent: {
     gap: spacing.md,
     paddingRight: spacing.xs,
-  },
-
-  // ── Dashboard toggle buttons ──────────────────
-  dashBtnRow: {
-    flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs,
-  },
-  dashBtn: {
-    flex: 1, paddingVertical: 14, borderRadius: radii.md,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#fff', borderWidth: 1.5, borderColor: NAVY,
-  },
-  dashBtnText: {
-    color: NAVY, fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy,
   },
 
   // ── Footer ────────────────────────────────────

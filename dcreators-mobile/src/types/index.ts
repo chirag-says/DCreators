@@ -44,11 +44,14 @@ export interface ConsultantProfile {
   ifsc_code: string | null;
   bank_account_number: string | null;
   terms_pdf_url: string | null;
+  // Category-specific onboarding answers — see src/config/categoryQuestions.ts
+  // for the question schema each category's answers are keyed against.
+  category_details: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
 
-export type ConsultantCategory = 'photographer' | 'designer' | 'sculptor' | 'artisan';
+export type ConsultantCategory = 'photographer' | 'videographer' | 'designer' | 'sculptor' | 'artisan';
 
 export type UserRole = 'client' | 'consultant';
 
@@ -80,6 +83,9 @@ export interface Project {
   assignment_details: string[] | null;
   assignment_brief: string;
   deadline: string | null;
+  // The date being booked (e.g. the wedding/shoot day) — distinct from
+  // `deadline`, which is the delivery deadline for the finished work.
+  event_date: string | null;
   budget: number;
   final_offer: number | null;    // negotiated price (set in CONSULTANT_NEGOTIATION_SCREEN)
   status: ProjectStatus;
@@ -88,6 +94,33 @@ export interface Project {
   milestone_1_date: string | null;
   milestone_2_date: string | null;
   final_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BidRequestStatus = 'open' | 'fulfilled' | 'unfulfilled' | 'cancelled';
+export type BidCandidateStatus = 'queued' | 'pending' | 'negotiating' | 'accepted' | 'declined' | 'skipped';
+
+export interface BidRequest {
+  id: string;
+  client_id: string;
+  category: ConsultantCategory;
+  assignment_brief: string;
+  event_date: string | null;
+  budget: number;
+  status: BidRequestStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BidCandidate {
+  id: string;
+  bid_request_id: string;
+  consultant_id: string; // consultant_profiles.id — NOT auth user_id
+  priority_rank: number;
+  quoted_price: number;
+  status: BidCandidateStatus;
+  project_id: string | null; // set once accepted
   created_at: string;
   updated_at: string;
 }

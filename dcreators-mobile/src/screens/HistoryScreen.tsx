@@ -1,19 +1,14 @@
-/**
- * HistoryScreen — "Sales History"
- * Matches Figma: "My History Dashboard.png"
+﻿/**
+ * HistoryScreen — role-aware project history
+ * Matches Figma: "My History Dashboard.png" (consultant variant)
  *
- * Layout:
- * - Header (D icon + notification + avatar)
- * - "Sales History" heading (navy)
- * - Subtitle description
- * - Sales / Projects tab toggle
- * - Artwork Sales section:
- *   - Sales items with icon, name, date, amount, status
- * - Overall Earnings card (dark navy):
- *   - Total amount (₹ 2.8L format)
- *   - Growth badge
- *   - Art Sales vs Projects split
- * - Recent Feedback section
+ * Consultant ("Sales History"):
+ * - Sales / Projects tab toggle, Artwork Sales section, Overall Earnings
+ *   card, Recent Feedback — these are all seller-side concepts.
+ * Client ("My Projects"):
+ * - Just the project list (Completed / All), no earnings or reviews —
+ *   a client never sells anything, so "Sales History" / earnings / reviews
+ *   ABOUT them don't apply.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -25,7 +20,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
-  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
@@ -33,7 +27,6 @@ import { TrendingUp, Palette, PenTool } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { fetchProjectHistory, fetchConsultantEarnings, fetchConsultantReviews } from '../services/projectService';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
-import { RemoteAssets } from '../lib/assets';
 import type { Project } from '../types';
 
 // ─── Figma tokens ────────────────────────────────────────────
@@ -100,6 +93,8 @@ export default function HistoryScreen({ navigation }: any) {
     return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  const isConsultant = role === 'consultant';
+
   const salesProjects = history.filter(p => p.status === 'completed' || p.status === 'balance_paid');
   const allProjects = history;
 
@@ -107,19 +102,19 @@ export default function HistoryScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg}>
+      <View style={styles.bg}>
         <SafeAreaView style={styles.safe} edges={['top']}>
           <TopHeader />
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
         </SafeAreaView>
-      </ImageBackground>
+      </View>
     );
   }
 
   return (
-    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
+    <View style={styles.bg}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <TopHeader />
         <ScrollView
@@ -128,9 +123,11 @@ export default function HistoryScreen({ navigation }: any) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         >
           {/* ── Title ──────────────────────────────── */}
-          <Text style={styles.title}>Sales History</Text>
+          <Text style={styles.title}>{isConsultant ? 'Sales History' : 'My Projects'}</Text>
           <Text style={styles.subtitle}>
-            Track your artistic legacy and consultant milestones across the Dcreators ecosystem.
+            {isConsultant
+              ? 'Track your artistic legacy and consultant milestones across the Dcreators ecosystem.'
+              : 'Track the status and progress of every project and artwork you\'ve commissioned.'}
           </Text>
 
           {/* ── Tab Toggle ─────────────────────────── */}
@@ -139,23 +136,27 @@ export default function HistoryScreen({ navigation }: any) {
               style={[styles.tab, activeTab === 'sales' && styles.tabActive]}
               onPress={() => setActiveTab('sales')}
             >
-              <Text style={[styles.tabText, activeTab === 'sales' && styles.tabTextActive]}>Sales</Text>
+              <Text style={[styles.tabText, activeTab === 'sales' && styles.tabTextActive]}>
+                {isConsultant ? 'Sales' : 'Completed'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.tab, activeTab === 'projects' && styles.tabActive]}
               onPress={() => setActiveTab('projects')}
             >
-              <Text style={[styles.tabText, activeTab === 'projects' && styles.tabTextActive]}>Projects</Text>
+              <Text style={[styles.tabText, activeTab === 'projects' && styles.tabTextActive]}>All</Text>
             </TouchableOpacity>
           </View>
 
-          {/* ── Sales list ─────────────────────────── */}
+          {/* ── Project/sales list ─────────────────── */}
           <View style={styles.salesSection}>
             <View style={styles.salesHeader}>
               <View style={styles.salesHeaderLeft}>
                 <Palette size={18} color={NAVY} />
                 <Text style={styles.salesTitle}>
-                  {activeTab === 'sales' ? 'Artwork Sales' : 'All Projects'}
+                  {isConsultant
+                    ? (activeTab === 'sales' ? 'Artwork Sales' : 'All Projects')
+                    : (activeTab === 'sales' ? 'Completed Projects' : 'All Projects')}
                 </Text>
               </View>
               <Text style={styles.salesTotalBadge}>
@@ -165,7 +166,7 @@ export default function HistoryScreen({ navigation }: any) {
 
             {displayProjects.length === 0 ? (
               <View style={styles.emptySection}>
-                <Text style={styles.emptyText}>No {activeTab} history yet</Text>
+                <Text style={styles.emptyText}>No {activeTab === 'sales' ? (isConsultant ? 'sales' : 'completed') : 'project'} history yet</Text>
               </View>
             ) : (
               displayProjects.slice(0, 10).map((project) => (
@@ -178,7 +179,7 @@ export default function HistoryScreen({ navigation }: any) {
                       {project.assignment_type || 'Creative Project'}
                     </Text>
                     <Text style={styles.salesItemDate}>
-                      {project.status === 'completed' ? 'Completed' : 'Sold'} on {formatDate(project.updated_at)}
+                      {project.status === 'completed' ? 'Completed' : (isConsultant ? 'Sold' : 'Updated')} on {formatDate(project.updated_at)}
                     </Text>
                   </View>
                   <View style={styles.salesItemRight}>
@@ -200,56 +201,61 @@ export default function HistoryScreen({ navigation }: any) {
             )}
           </View>
 
-          {/* ── Overall Earnings Card ──────────────── */}
-          <View style={styles.earningsCard}>
-            <Text style={styles.earningsLabel}>OVERALL EARNINGS</Text>
-            <Text style={styles.earningsAmount}>{formatAmount(earnings.total)}</Text>
-            <View style={styles.growthBadge}>
-              <TrendingUp size={14} color="#fff" />
-              <Text style={styles.growthText}>
-                {earnings.thisMonth > 0 ? `₹${(earnings.thisMonth / 1000).toFixed(0)}K` : '0'} this month
-              </Text>
-            </View>
-            <View style={styles.earningsSplit}>
-              <View>
-                <Text style={styles.splitLabel}>ART SALES</Text>
-                <Text style={styles.splitValue}>{formatAmount(Math.floor(earnings.total * 0.52))}</Text>
-              </View>
-              <View>
-                <Text style={styles.splitLabel}>PROJECTS</Text>
-                <Text style={styles.splitValue}>{formatAmount(Math.floor(earnings.total * 0.48))}</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* ── Recent Feedback ────────────────────── */}
-          <View style={styles.feedbackSection}>
-            <Text style={styles.feedbackTitle}>Recent Feedback</Text>
-            {reviews.length === 0 ? (
-              <Text style={styles.emptyText}>No reviews yet</Text>
-            ) : (
-              reviews.map((r) => (
-                <View key={r.id} style={styles.feedbackItem}>
-                  <View style={[styles.feedbackAvatar, { backgroundColor: '#E8F4FE' }]}>
-                    <Text style={styles.feedbackInitials}>
-                      {r.profiles?.name ? r.profiles.name.substring(0, 2).toUpperCase() : '??'}
-                    </Text>
+          {/* ── Overall Earnings + Recent Feedback ───
+               Seller-side concepts — a client never sells anything or
+               gets reviewed, so neither applies to them. */}
+          {isConsultant && (
+            <>
+              <View style={styles.earningsCard}>
+                <Text style={styles.earningsLabel}>OVERALL EARNINGS</Text>
+                <Text style={styles.earningsAmount}>{formatAmount(earnings.total)}</Text>
+                <View style={styles.growthBadge}>
+                  <TrendingUp size={14} color="#fff" />
+                  <Text style={styles.growthText}>
+                    {earnings.thisMonth > 0 ? `₹${(earnings.thisMonth / 1000).toFixed(0)}K` : '0'} this month
+                  </Text>
+                </View>
+                <View style={styles.earningsSplit}>
+                  <View>
+                    <Text style={styles.splitLabel}>ART SALES</Text>
+                    <Text style={styles.splitValue}>{formatAmount(Math.floor(earnings.total * 0.52))}</Text>
                   </View>
-                  <View style={styles.feedbackContent}>
-                    <Text style={styles.feedbackQuote}>
-                      {r.review_text ? `"${r.review_text}"` : '(No text review)'}
-                    </Text>
-                    <Text style={styles.feedbackAuthor}>
-                      {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)} — {r.profiles?.name || 'Client'}
-                    </Text>
+                  <View>
+                    <Text style={styles.splitLabel}>PROJECTS</Text>
+                    <Text style={styles.splitValue}>{formatAmount(Math.floor(earnings.total * 0.48))}</Text>
                   </View>
                 </View>
-              ))
-            )}
-          </View>
+              </View>
+
+              <View style={styles.feedbackSection}>
+                <Text style={styles.feedbackTitle}>Recent Feedback</Text>
+                {reviews.length === 0 ? (
+                  <Text style={styles.emptyText}>No reviews yet</Text>
+                ) : (
+                  reviews.map((r) => (
+                    <View key={r.id} style={styles.feedbackItem}>
+                      <View style={[styles.feedbackAvatar, { backgroundColor: '#E8F4FE' }]}>
+                        <Text style={styles.feedbackInitials}>
+                          {r.profiles?.name ? r.profiles.name.substring(0, 2).toUpperCase() : '??'}
+                        </Text>
+                      </View>
+                      <View style={styles.feedbackContent}>
+                        <Text style={styles.feedbackQuote}>
+                          {r.review_text ? `"${r.review_text}"` : '(No text review)'}
+                        </Text>
+                        <Text style={styles.feedbackAuthor}>
+                          {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)} — {r.profiles?.name || 'Client'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+            </>
+          )}
         </ScrollView>
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 }
 

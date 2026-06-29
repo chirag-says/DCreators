@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, Platform,
-  ScrollView, ImageBackground, Image, Alert, ActivityIndicator,
+  ScrollView, Image, Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
-import { ChevronDown, Camera, Square, CheckSquare, X, ImagePlus, Save, ArrowLeft } from 'lucide-react-native';
+import { ChevronDown, ChevronRight, Camera, Square, CheckSquare, X, ImagePlus, Save, ArrowLeft } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
-import { RemoteAssets } from '../lib/assets';
 
 
 const CATEGORIES = [
@@ -215,7 +214,7 @@ export default function EditConsultantProfileScreen({ navigation }: any) {
   }
 
   return (
-    <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} resizeMode="cover">
+    <View style={styles.bg}>
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <TopHeader />
 
@@ -313,6 +312,14 @@ export default function EditConsultantProfileScreen({ navigation }: any) {
           {/* Section: Services & Pricing */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Services & Pricing</Text>
+            <TouchableOpacity
+              style={styles.dropdown}
+              onPress={() => navigation.navigate('ConsultantServicePricing')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownText}>Manage full service list & pricing</Text>
+              <ChevronRight size={18} color="#E8854A" />
+            </TouchableOpacity>
 
             <TouchableOpacity style={styles.dropdown} onPress={() => setShowCategoryPicker(!showCategoryPicker)}>
               <Text style={styles.dropdownText}>
@@ -346,10 +353,34 @@ export default function EditConsultantProfileScreen({ navigation }: any) {
             />
           </View>
 
+          {/* Section: Category-specific details */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Category Details</Text>
+            <Text style={styles.hint}>
+              Specializations, equipment, deliverables and other details specific to your category.
+            </Text>
+            <TouchableOpacity
+              style={styles.dropdown}
+              onPress={() => navigation.navigate('ConsultantCategoryDetails')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownText}>Update category details</Text>
+              <ChevronRight size={18} color="#E8854A" />
+            </TouchableOpacity>
+          </View>
+
           {/* Section: Portfolio */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Portfolio & Work Samples</Text>
             <Text style={styles.hint}>Upload up to 5 reference images showcasing your work</Text>
+            <TouchableOpacity
+              style={styles.dropdown}
+              onPress={() => navigation.navigate('ConsultantPortfolioUpdate')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownText}>Open full portfolio manager</Text>
+              <ChevronRight size={18} color="#E8854A" />
+            </TouchableOpacity>
 
             <View style={styles.portfolioGrid}>
               {portfolioImages.map((uri, i) => (
@@ -394,7 +425,7 @@ export default function EditConsultantProfileScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 }
 

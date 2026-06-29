@@ -240,38 +240,6 @@ export default function ConsultantDashboard({ navigation }: ConsultantDashboardP
         Manage incoming artwork purchase requests and fulfillment status for your collectors.
       </Text>
 
-      {/* Utility navigation tiles */}
-      <View style={styles.quickGrid}>
-        <TouchableOpacity
-          style={styles.quickBtn}
-          onPress={() => (navigation as any).navigate('ConsultantEarningsHistory')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.quickLabel}>{'Sales\nHistory'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickBtn}
-          onPress={() => (navigation as any).navigate('ConsultantProjectManagement')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.quickLabel}>{'Manage\nProjects'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickBtn}
-          onPress={() => (navigation as any).navigate('ConsultantPortfolioUpdate')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.quickLabel}>{'Update\nPortfolio'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickBtn}
-          onPress={() => (navigation as any).navigate('ConsultantServicePricing')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.quickLabel}>{'Service\nPricing'}</Text>
-        </TouchableOpacity>
-      </View>
-
       {loading ? (
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
       ) : orders.length === 0 ? (
@@ -306,41 +274,6 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     lineHeight: 20,
     marginBottom: spacing.lg,
-  },
-
-  quickGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  quickBtn: {
-    flexGrow: 1,
-    flexBasis: '45%',
-    backgroundColor: '#F3F4F6',
-    borderRadius: radii.lg,
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  quickBtnActive: {
-    backgroundColor: '#fff',
-    borderColor: NAVY,
-    borderWidth: 1.5,
-  },
-  quickLabel: {
-    fontSize: fontSizes.sm,
-    fontFamily: fonts.medium,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 16,
-  },
-  quickLabelActive: {
-    color: NAVY,
-    fontWeight: '700',
   },
 
   requestCard: {

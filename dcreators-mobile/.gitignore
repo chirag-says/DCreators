@@ -2,6 +2,7 @@
 
 # dependencies
 node_modules/
+package-lock.json
 
 # Expo
 .expo/
@@ -30,12 +31,26 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# env / secrets – NEVER commit
+.env
+.env.local
 .env*.local
+.env.development
+.env.production
 
-# typescript
+# typescript build info
 *.tsbuildinfo
 
 # generated native folders
 /ios
 /android
+
+# one-off refactor / utility scripts (local dev only)
+refactor-*.js
+fix-headers.js
+
+# scripts/ folder — may contain hardcoded credentials or seeding scripts
+scripts/
+
+# Supabase local temp / linked project config
+supabase/.temp/

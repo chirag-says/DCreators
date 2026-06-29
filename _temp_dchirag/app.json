@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "DChirag",
+    "slug": "DChirag",
+    "version": "1.0.0",
+    "extra": {
+      "eas": {
+        "projectId": "8521d79b-e75e-45b7-a97c-a265bbce6d92"
+      }
+    }
+  }
+}

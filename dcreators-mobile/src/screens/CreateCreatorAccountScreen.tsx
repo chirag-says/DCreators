@@ -192,7 +192,7 @@ export default function CreateCreatorAccountScreen({ navigation }: any) {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <Text style={s.heroTitle}>Create{'\n'}Creator's{'\n'}Account</Text>
         <Text style={s.heroSub}>
-          Step 1 of 3 — register your identity and banking details so clients can pay you securely.
+          Step 1 of 4 — register your identity and banking details so clients can pay you securely.
         </Text>
 
         {/* Avatar upload */}

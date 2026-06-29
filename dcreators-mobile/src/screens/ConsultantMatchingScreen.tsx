@@ -89,15 +89,16 @@ export default function ConsultantMatchingScreen({ navigation, route }: any) {
     try {
       // Category matching: map hire role to consultant category
       const roleToCategory: Record<string, string[]> = {
-        'Hire Creative Consultant': ['photographer', 'designer', 'sculptor', 'artisan'],
+        'Hire Creative Consultant': ['photographer', 'videographer', 'designer', 'sculptor', 'artisan'],
         'Hire Photographer': ['photographer'],
+        'Hire Videographer': ['videographer'],
         'Hire Designer': ['designer'],
         'Hire Sculptor': ['sculptor'],
         'Hire Artisan': ['artisan'],
       };
       const allowedCategories =
         roleToCategory[project.assignment_type] ??
-        ['photographer', 'designer', 'sculptor', 'artisan'];
+        ['photographer', 'videographer', 'designer', 'sculptor', 'artisan'];
 
       const { data, error } = await supabase
         .from('consultant_profiles')

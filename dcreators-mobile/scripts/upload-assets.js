@@ -2,10 +2,13 @@ const cloudinary = require('cloudinary').v2;
 const fs = require('fs');
 const path = require('path');
 
+// Load from env — NEVER hardcode credentials
+require('dotenv').config({ path: '../.env' });
+
 cloudinary.config({
-  cloud_name: 'dduxexiye',
-  api_key: '287516355641222',
-  api_secret: '2OU3ADTdr_ZA6iz7WOUi_P5D78I'
+  cloud_name: process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 const ASSETS_DIR = path.join(__dirname, '..', 'assets');

@@ -1,34 +1,43 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ImageBackground, Platform, ScrollView, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
+﻿import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Platform, ScrollView, KeyboardAvoidingView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Send, Paperclip } from 'lucide-react-native';
+import { ChevronLeft, Send, Paperclip, Check, X } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
-import { RemoteAssets } from '../lib/assets';
-
+import { acceptBidCandidate, declineBidCandidate } from '../services/bidService';
 
 export default function ChatScreen({ navigation, route }: any) {
   const project = route?.params?.project;
+  // Negotiation mode: chat scoped to a bid_candidate instead of a project —
+  // same messages table, same realtime pattern, different scope column.
+  const bidCandidateId: string | undefined = route?.params?.bidCandidateId;
+  const quotedPrice: number | undefined = route?.params?.quotedPrice;
+  const isBidMode = !!bidCandidateId;
+  const entityId = isBidMode ? bidCandidateId : project?.id;
+  const entityColumn = isBidMode ? 'bid_candidate_id' : 'project_id';
+
   const otherName = route?.params?.otherName || 'Participant';
   const profile = useAuthStore((s) => s.profile);
+  const currentRole = useAuthStore((s) => s.currentRole);
 
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [deciding, setDeciding] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     fetchMessages();
     // Subscribe to new messages via realtime
     const channel = supabase
-      .channel(`messages:${project?.id}`)
+      .channel(`messages:${entityColumn}:${entityId}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
-        filter: `project_id=eq.${project?.id}`,
+        filter: `${entityColumn}=eq.${entityId}`,
       }, (payload: any) => {
         setMessages((prev) => [...prev, payload.new]);
         setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
@@ -39,12 +48,12 @@ export default function ChatScreen({ navigation, route }: any) {
   }, []);
 
   async function fetchMessages() {
-    if (!project?.id) { setLoading(false); return; }
+    if (!entityId) { setLoading(false); return; }
     try {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .eq('project_id', project.id)
+        .eq(entityColumn, entityId)
         .order('created_at', { ascending: true });
       if (!error && data) setMessages(data);
     } catch {}
@@ -55,13 +64,13 @@ export default function ChatScreen({ navigation, route }: any) {
   }
 
   async function handleSend() {
-    if (!input.trim() || !project?.id || !profile?.id) return;
+    if (!input.trim() || !entityId || !profile?.id) return;
     const text = input.trim();
     setInput('');
     setSending(true);
     try {
       const { error } = await supabase.from('messages').insert({
-        project_id: project.id,
+        [entityColumn]: entityId,
         sender_id: profile.id,
         text,
       });
@@ -69,6 +78,39 @@ export default function ChatScreen({ navigation, route }: any) {
       // Message will appear via realtime subscription
     } catch {}
     finally { setSending(false); }
+  }
+
+  async function handleAccept() {
+    if (!bidCandidateId || deciding) return;
+    setDeciding(true);
+    try {
+      const newProject = await acceptBidCandidate(bidCandidateId);
+      navigation.navigate('Main', { screen: 'CreatorWorkorder', params: { project: newProject } });
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Could not accept this bid.');
+    } finally {
+      setDeciding(false);
+    }
+  }
+
+  function handleDecline() {
+    if (!bidCandidateId || deciding) return;
+    Alert.alert('Decline This Bid?', 'The client\'s request will move to the next consultant on their list.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Decline', style: 'destructive', onPress: async () => {
+          setDeciding(true);
+          try {
+            await declineBidCandidate(bidCandidateId);
+            navigation.goBack();
+          } catch (e: any) {
+            Alert.alert('Error', e.message ?? 'Could not decline this bid.');
+          } finally {
+            setDeciding(false);
+          }
+        },
+      },
+    ]);
   }
 
   function formatTime(dateStr: string) {
@@ -99,13 +141,19 @@ export default function ChatScreen({ navigation, route }: any) {
     }
   });
 
-  const assignmentLabel = project
-    ? `${project.assignment_type?.charAt(0).toUpperCase()}${project.assignment_type?.slice(1) || ''}`
-    : 'Assignment';
+  const assignmentLabel = isBidMode
+    ? `Negotiating · ₹${(quotedPrice ?? 0).toLocaleString('en-IN')}`
+    : project
+      ? `${project.assignment_type?.charAt(0).toUpperCase()}${project.assignment_type?.slice(1) || ''}`
+      : 'Assignment';
+
+  // Per spec, accept/decline on a negotiation belongs to the consultant —
+  // the client's role here is to discuss, not unilaterally close it out.
+  const showDecisionStrip = isBidMode && currentRole === 'consultant';
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.cardBg }]} edges={['top']}>
-      <ImageBackground source={{ uri: RemoteAssets.bgTexture }} style={styles.bg} imageStyle={{ opacity: 1 }}>
+      <View style={styles.bg}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
 
           {/* Header */}
@@ -119,6 +167,28 @@ export default function ChatScreen({ navigation, route }: any) {
             </View>
             <View style={{ width: 36 }} />
           </View>
+
+          {showDecisionStrip && (
+            <View style={styles.decisionStrip}>
+              <TouchableOpacity
+                style={[styles.decisionBtn, styles.declineBtn, deciding && { opacity: 0.6 }]}
+                onPress={handleDecline}
+                disabled={deciding}
+                activeOpacity={0.85}
+              >
+                <X size={15} color="#fff" />
+                <Text style={styles.decisionBtnText}>Decline</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.decisionBtn, styles.acceptBtn, deciding && { opacity: 0.6 }]}
+                onPress={handleAccept}
+                disabled={deciding}
+                activeOpacity={0.85}
+              >
+                {deciding ? <ActivityIndicator size="small" color="#fff" /> : <><Check size={15} color="#fff" /><Text style={styles.decisionBtnText}>Accept</Text></>}
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Messages */}
           {loading ? (
@@ -186,7 +256,7 @@ export default function ChatScreen({ navigation, route }: any) {
           </View>
 
         </KeyboardAvoidingView>
-      </ImageBackground>
+      </View>
     </SafeAreaView>
   );
 }
@@ -204,6 +274,18 @@ const styles = StyleSheet.create({
   headerCenter: { alignItems: 'center' },
   headerName: { fontSize: fontSizes.lg, fontWeight: '700', color: colors.textPrimary, fontFamily: fonts.heavy },
   headerSub: { fontSize: fontSizes.xs + 1, color: colors.textSecondary, fontFamily: fonts.medium },
+
+  decisionStrip: {
+    flexDirection: 'row', gap: 10, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+    backgroundColor: colors.cardBg, borderBottomWidth: 1, borderBottomColor: colors.borderCard,
+  },
+  decisionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, borderRadius: radii.md,
+  },
+  acceptBtn: { backgroundColor: colors.success },
+  declineBtn: { backgroundColor: colors.error },
+  decisionBtnText: { color: '#fff', fontSize: fontSizes.sm + 1, fontWeight: '700', fontFamily: fonts.heavy },
 
   chatScroll: { flex: 1 },
   chatContainer: { padding: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xl },

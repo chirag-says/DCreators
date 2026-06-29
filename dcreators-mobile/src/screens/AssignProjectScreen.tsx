@@ -44,6 +44,7 @@ const BG = '#F5F6FA';
 const HIRE_ROLES = [
   'Hire Creative Consultant',
   'Hire Photographer',
+  'Hire Videographer',
   'Hire Designer',
   'Hire Sculptor',
   'Hire Artisan',

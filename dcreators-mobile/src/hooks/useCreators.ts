@@ -11,6 +11,9 @@ import type { ConsultantProfile, ConsultantCategory } from '../types';
 /** Fallback avatar mapping when consultant has no avatar_url */
 const CATEGORY_FALLBACK_AVATAR: Record<ConsultantCategory, string> = {
   photographer: 'dcreators/photographer',
+  // No dedicated videographer asset uploaded yet — reuse photographer's
+  // fallback until one is added to Cloudinary.
+  videographer: 'dcreators/photographer',
   designer: 'dcreators/designer',
   sculptor: 'dcreators/sculptor',
   artisan: 'dcreators/artisan',
