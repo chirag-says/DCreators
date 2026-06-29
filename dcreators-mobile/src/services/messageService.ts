@@ -33,6 +33,33 @@ export async function fetchMessages(scopeColumn: MessageScopeColumn, scopeId: st
   return (data ?? []) as Message[];
 }
 
+/** Fetch the most recent message for a project (for chat list previews). */
+export async function fetchLatestMessage(projectId: string): Promise<Message | null> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('text, created_at, sender_id')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (error || !data?.length) {
+    return null;
+  }
+
+  return data[0] as Message;
+}
+
+/** Count messages on a project not sent by the given user (rough unread proxy). */
+export async function countUnreadMessages(projectId: string, excludeSenderId: string): Promise<number> {
+  const { count } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('project_id', projectId)
+    .neq('sender_id', excludeSenderId);
+
+  return count ?? 0;
+}
+
 /** Send a new message scoped to a project or bid candidate. */
 export async function sendMessage(params: {
   scopeColumn: MessageScopeColumn;

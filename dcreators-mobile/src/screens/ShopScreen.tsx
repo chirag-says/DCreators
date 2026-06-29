@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, ImageBackground, TouchableOpacity, TextInput, Platform, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, Filter, ShoppingBag, Heart } from 'lucide-react-native';
-import { supabase } from '../lib/supabase';
+import { fetchShopProducts } from '../services/shopService';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
 
@@ -23,28 +23,19 @@ export default function ShopScreen({ navigation }: any) {
 
   async function fetchProducts() {
     try {
-      const { data, error } = await supabase
-        .from('shop_products')
-        .select('*, consultant_profiles(display_name, code)')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-
-      if (!error && data) {
-        const dbProducts = data.map((p: any) => ({
-          id: p.id,
-          title: p.title,
-          description: p.description,
-          category: p.category || 'Other',
-          price: Number(p.price),
-          images: p.images || [],
-          consultant_profiles: p.consultant_profiles,
-          creator: `${p.consultant_profiles?.code || '---'} / ${p.consultant_profiles?.display_name?.split(' ')[0] || 'Creator'}`,
-          image: p.images?.[0] ? { uri: p.images[0] } : { uri: RemoteAssets.designer },
-        }));
-        setProducts(dbProducts);
-      } else {
-        setProducts([]);
-      }
+      const data = await fetchShopProducts();
+      const dbProducts = data.map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        category: p.category || 'Other',
+        price: Number(p.price),
+        images: p.images || [],
+        consultant_profiles: p.consultant_profiles,
+        creator: `${p.consultant_profiles?.code || '---'} / ${p.consultant_profiles?.display_name?.split(' ')[0] || 'Creator'}`,
+        image: p.images?.[0] ? { uri: p.images[0] } : { uri: RemoteAssets.designer },
+      }));
+      setProducts(dbProducts);
     } catch {
       setProducts([]);
     }

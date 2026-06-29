@@ -142,6 +142,45 @@ export async function createProject(payload: Record<string, unknown>): Promise<P
   return data as Project;
 }
 
+/** Statuses considered "active enough to chat about" on the messages list screen. */
+const MESSAGING_STATUSES: ProjectStatus[] = [
+  'advance_pending', 'advance_paid',
+  'work_order_generated', 'work_order_accepted',
+  'in_progress', 'review_1', 'review_2', 'final_review',
+  'final_approved', 'balance_pending', 'balance_paid',
+  'delivered', 'completed',
+];
+
+/**
+ * Fetch projects with an active chat thread for the messages list screen,
+ * scoped to either a consultant or a client.
+ */
+export async function fetchMessagingProjects(params: {
+  role: 'client' | 'consultant';
+  clientId?: string;
+  consultantProfileId?: string;
+}): Promise<any[]> {
+  let request = supabase
+    .from('projects')
+    .select('id, assignment_type, status, client_id, consultant_id, consultant_profiles(display_name, code, category, avatar_url)')
+    .in('status', MESSAGING_STATUSES);
+
+  if (params.role === 'consultant' && params.consultantProfileId) {
+    request = request.eq('consultant_id', params.consultantProfileId);
+  } else if (params.clientId) {
+    request = request.eq('client_id', params.clientId);
+  }
+
+  const { data, error } = await request.order('updated_at', { ascending: false });
+
+  if (error) {
+    console.error('[ProjectService] fetchMessagingProjects error:', error.message);
+    return [];
+  }
+
+  return data ?? [];
+}
+
 /** Fetch a consultant's active project assignments for the dashboard, with client name+avatar joined. */
 export async function fetchConsultantDashboardProjects(consultantUserId: string): Promise<ProjectWithClient[]> {
   const { data, error } = await supabase
@@ -254,6 +293,21 @@ const STATUS_TRANSITIONS: Partial<Record<ProjectStatus, ProjectStatus[]>> = {
 
 
 /**
+ * Attach a consultant to a (bidding-path) project before transitioning its status.
+ * Kept separate from updateProjectStatus since consultant_id isn't a status-machine field.
+ */
+export async function assignConsultantToProject(projectId: string, consultantUserId: string): Promise<void> {
+  const { error } = await supabase
+    .from('projects')
+    .update({ consultant_id: consultantUserId })
+    .eq('id', projectId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/**
  * Update a project's status with validation against the status machine.
  */
 export async function updateProjectStatus(
@@ -293,14 +347,20 @@ export async function updateProjectStatus(
 // ─── Payment Queries ─────────────────────────────────────────
 
 /**
- * Fetch payments for a project.
+ * Fetch payments for a project. Pass `status` to filter (e.g. 'completed' for invoices).
  */
-export async function fetchProjectPayments(projectId: string): Promise<Payment[]> {
-  const { data, error } = await supabase
+export async function fetchProjectPayments(projectId: string, status?: string): Promise<Payment[]> {
+  let request = supabase
     .from('payments')
     .select('*')
     .eq('project_id', projectId)
     .order('created_at', { ascending: true });
+
+  if (status) {
+    request = request.eq('status', status);
+  }
+
+  const { data, error } = await request;
 
   if (error) {
     console.error('[ProjectService] fetchProjectPayments error:', error.message);
@@ -451,6 +511,21 @@ export async function updateSubmissionFeedback(
 }
 
 /**
+ * Insert a review row. Shape varies slightly by which review screen is used
+ * (quick-chip tags vs free-text tags), so this accepts a flexible payload.
+ */
+export async function createReview(payload: Record<string, unknown>): Promise<void> {
+  const { error } = await supabase.from('reviews').insert({
+    ...payload,
+    created_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/**
  * Send a collaboration request from one consultant to another on a project.
  */
 export async function createCollaborationRequest(request: {
@@ -467,6 +542,44 @@ export async function createCollaborationRequest(request: {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+/**
+ * Fetch a consultant's completed projects for the earnings history screen, with client name joined.
+ */
+export async function fetchCompletedProjectsForEarnings(consultantUserId: string): Promise<any[]> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, assignment_brief, final_offer, budget, updated_at, client:profiles!client_id(name)')
+    .eq('consultant_id', consultantUserId)
+    .eq('status', 'completed')
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    console.error('[ProjectService] fetchCompletedProjectsForEarnings error:', error.message);
+    return [];
+  }
+
+  return data ?? [];
+}
+
+/**
+ * Fetch a consultant's most recent reviews with reviewer profile joined, for the earnings history screen.
+ */
+export async function fetchRecentReviewsWithReviewer(consultantUserId: string, limit = 5): Promise<any[]> {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*, reviewer:profiles!reviewer_id(name, avatar_url)')
+    .eq('consultant_id', consultantUserId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('[ProjectService] fetchRecentReviewsWithReviewer error:', error.message);
+    return [];
+  }
+
+  return data ?? [];
 }
 
 /**

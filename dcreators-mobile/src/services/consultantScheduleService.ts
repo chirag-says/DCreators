@@ -37,6 +37,20 @@ export async function removeBlockedDate(consultantId: string, date: string): Pro
   if (error) throw new Error(error.message);
 }
 
+/** Fetch dates already booked (via confirmed projects) for a consultant, as 'YYYY-MM-DD' strings. */
+export async function fetchConsultantTakenDates(consultantUserId: string): Promise<string[]> {
+  const { data, error } = await supabase.rpc('get_consultant_taken_dates', {
+    p_consultant_user_id: consultantUserId,
+  });
+
+  if (error) {
+    console.error('[ConsultantScheduleService] fetchConsultantTakenDates error:', error.message);
+    return [];
+  }
+
+  return (data ?? []).map((row: any) => row.taken_date as string);
+}
+
 /** Create a quick-entry project note (lightweight reminder, not a full project row). */
 export async function createProjectNote(note: {
   consultant_id: string;

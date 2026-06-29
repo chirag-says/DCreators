@@ -2,7 +2,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, SlidersHorizontal, ChevronLeft, User } from 'lucide-react-native';
-import { supabase } from '../lib/supabase';
+import { fetchTrendingConsultants, searchConsultants } from '../services/consultantService';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
 
@@ -61,36 +61,16 @@ export default function SearchScreen({ navigation }: any) {
 
   async function fetchTrending() {
     try {
-      const { data, error } = await supabase
-        .from('consultant_profiles')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(6);
-      if (!error && data) setTrendingCreators(data);
+      const data = await fetchTrendingConsultants();
+      setTrendingCreators(data);
     } catch {}
   }
 
   async function performSearch() {
     setIsSearching(true);
     try {
-      let query = supabase
-        .from('consultant_profiles')
-        .select('*')
-        .eq('is_active', true);
-
-      if (selectedCategory) {
-        query = query.eq('category', selectedCategory);
-      }
-
-      if (searchQuery.trim()) {
-        query = query.or(
-          `display_name.ilike.%${searchQuery}%,expertise.ilike.%${searchQuery}%,subtitle.ilike.%${searchQuery}%`
-        );
-      }
-
-      const { data, error } = await query.limit(20);
-      setResults((!error && data) ? data : []);
+      const data = await searchConsultants({ query: searchQuery, category: selectedCategory, limit: 20 });
+      setResults(data);
     } catch {
       setResults([]);
     } finally {

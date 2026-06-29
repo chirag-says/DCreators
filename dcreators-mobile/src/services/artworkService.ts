@@ -25,6 +25,44 @@ export async function fetchArtworkOrderById(orderId: string, select: string): Pr
 }
 
 /**
+ * Fetch an artist's incoming purchase requests in a given status, newest first.
+ */
+export async function fetchArtworkOrdersForArtist(artistId: string, status: ArtworkOrderStatus): Promise<ArtworkOrder[]> {
+  const { data, error } = await supabase
+    .from('artwork_orders')
+    .select('*, shop_products(title,description,price,images,category), buyer_profile:profiles!buyer_id(name,avatar_url)')
+    .eq('artist_id', artistId)
+    .eq('status', status)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[ArtworkService] fetchArtworkOrdersForArtist error:', error.message);
+    return [];
+  }
+
+  return (data ?? []) as ArtworkOrder[];
+}
+
+/**
+ * Fetch an artist's completed artwork sales for the earnings history screen.
+ */
+export async function fetchCompletedArtworkSales(artistId: string): Promise<ArtworkOrder[]> {
+  const { data, error } = await supabase
+    .from('artwork_orders')
+    .select('*, shop_products(title, images)')
+    .eq('artist_id', artistId)
+    .eq('status', 'completed')
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    console.error('[ArtworkService] fetchCompletedArtworkSales error:', error.message);
+    return [];
+  }
+
+  return (data ?? []) as ArtworkOrder[];
+}
+
+/**
  * Update an artwork order's status and any extra fields (e.g. consignment_no).
  */
 export async function updateArtworkOrderStatus(
