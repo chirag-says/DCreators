@@ -8,7 +8,7 @@ import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/the
 
 export default function AssignMultipleScreen({ navigation }: any) {
   return (
-    <View style={styles.bg}>
+    <View style={styles.backgroundImage}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <TopHeader />
         

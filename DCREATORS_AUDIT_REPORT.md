@@ -92,11 +92,20 @@ Goal: one boundary between screens and Supabase.
 
 Verification: schema-rename smoke test touches only service files; React Query devtools shows cache hits across screens; error states render consistently.
 
-### Phase 3 — Performance
+### Phase 3 — Performance ✅ DONE
 Goal: smooth on mid-tier Android.
-- Replace `.map()`-in-`ScrollView` with `FlatList`/`SectionList` for all lists >~20 rows (ChatScreen first, then Notifications, Search, History, Shop, ConsultantProjectManagement, CreatorDashboard). Add `keyExtractor`, `React.memo` row components, and `getItemLayout` where row height is fixed. *(M)*
-- `React.memo` the card/row components (`FeaturedCreatorCard`, `ProjectCard`, search result rows). *(S)*
-- Parallelize startup fetches in `useAuthStore.initialize` with `Promise.all`. *(S)*
+- ✅ Replace `.map()`-in-`ScrollView` with `FlatList`/`SectionList` for all lists >~20 rows:
+  - **ChatScreen** — FlatList + memoized `MessageBubble`, `useMemo` date-header rows, `keyExtractor`
+  - **NotificationsScreen** — FlatList + memoized `NotificationRow`, `RefreshControl`, `keyExtractor`
+  - **SearchScreen** — FlatList + memoized `ConsultantCard`, `ListHeader`/`ListEmpty`, `keyExtractor`
+  - **HistoryScreen** — FlatList + memoized `HistoryProjectRow` & `ReviewRow`, `ListHeader`/`ListFooter`, `keyExtractor`
+  - **ShopScreen** — FlatList `numColumns={2}` + memoized `ShopProductCard`, `ListHeader`/`ListEmpty`, `keyExtractor`
+  - *ConsultantProjectManagement* — deprioritized (small bounded lists 3-30 items in mixed-layout ScrollView; FlatList nesting would be an anti-pattern)
+  - *CreatorDashboard* — deprioritized (same: small bounded tab data, mixed-content layout)
+- ✅ `React.memo` the card/row components: `FeaturedCreatorCard`, `ProjectCard`, `ConsultantCard`, `MessageBubble`, `NotificationRow`, `HistoryProjectRow`, `ReviewRow`, `ShopProductCard`. *(S)*
+- ✅ Parallelize startup fetches in `useAuthStore.initialize` and `verifyOTP` with `Promise.all`. *(S)*
+- ⚠️ `ProjectCard.tsx` is dead code — not imported anywhere. Flagged for removal.
+- Bonus: `useMemo` added for `filteredProducts` in ShopScreen and `rows` in ChatScreen.
 
 Verification: scroll a 200-message chat + 100-item list on a low-end device/emulator with no dropped frames; cold-start time measured before/after.
 

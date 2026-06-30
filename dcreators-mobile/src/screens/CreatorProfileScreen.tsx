@@ -1,7 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, Dimensions, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Heart, Award, Tag, ShieldCheck, Box, Camera, Hash, BadgeCheck } from 'lucide-react-native';
 import TopHeader from '../components/TopHeader';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
@@ -33,6 +33,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function CreatorProfileScreen({ route, navigation }: any) {
   const creator = route?.params?.creator;
   const [activeImage, setActiveImage] = useState(0);
+  const [fav, setFav] = useState(false);
   const currentRole = useAuthStore((s) => s.currentRole);
 
   const name = creator?.name || 'Creator';
@@ -67,14 +68,25 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
     ? realPortfolioImages.map((uri: string) => ({ uri }))
     : portfolioKeys.map((key: string) => AVATAR_IMAGES[key] || AVATAR_IMAGES.photographer);
 
+  const expertiseLabel = expertise ? expertise.split(',')[0]?.trim() : categoryLabel;
+
   return (
     <View style={styles.bg}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <TopHeader />
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces={false}>
 
-          {/* ── Category Title (top center, italic like Figma) ── */}
-          <Text style={styles.categoryTitle}>{categoryLabel}</Text>
+          {/* ── Title row: back + category + favorite ── */}
+          <View style={styles.titleRow}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+              <ChevronLeft size={24} color={colors.primary} />
+            </TouchableOpacity>
+            <Text style={styles.categoryTitle}>{categoryLabel}</Text>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity style={styles.favBtn} onPress={() => setFav(f => !f)} activeOpacity={0.8}>
+              <Heart size={20} color={fav ? colors.orange : colors.primary} fill={fav ? colors.orange : 'transparent'} />
+            </TouchableOpacity>
+          </View>
 
           {/* ── Large Artwork Image Card ── */}
           <View style={styles.artworkCard}>
@@ -83,15 +95,21 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
               style={styles.artworkImage}
               resizeMode="cover"
             />
-            {/* Navigation arrows */}
             {portfolioImages.length > 1 && (
               <>
-                <TouchableOpacity style={styles.arrowL} activeOpacity={0.7} onPress={() => setActiveImage(p => p > 0 ? p - 1 : portfolioImages.length - 1)}>
-                  <ChevronLeft size={32} color="rgba(255,255,255,0.8)" />
+                {/* Circular nav buttons */}
+                <TouchableOpacity style={[styles.navCircle, styles.navCircleL]} activeOpacity={0.85} onPress={() => setActiveImage(p => p > 0 ? p - 1 : portfolioImages.length - 1)}>
+                  <ChevronLeft size={22} color={colors.primary} />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.arrowR} activeOpacity={0.7} onPress={() => setActiveImage(p => p < portfolioImages.length - 1 ? p + 1 : 0)}>
-                  <ChevronRight size={32} color="rgba(255,255,255,0.8)" />
+                <TouchableOpacity style={[styles.navCircle, styles.navCircleR]} activeOpacity={0.85} onPress={() => setActiveImage(p => p < portfolioImages.length - 1 ? p + 1 : 0)}>
+                  <ChevronRight size={22} color={colors.primary} />
                 </TouchableOpacity>
+                {/* Counter pill */}
+                <View style={styles.counterWrap} pointerEvents="none">
+                  <View style={styles.counterPill}>
+                    <Text style={styles.counterText}>{activeImage + 1} / {portfolioImages.length}</Text>
+                  </View>
+                </View>
               </>
             )}
           </View>
@@ -105,36 +123,69 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
             </View>
           )}
 
-          {/* ── Creator Info Section (Figma: circular avatar + details) ── */}
-          <View style={styles.creatorSection}>
-            {/* Circular Avatar */}
-            <View style={styles.avatarCircleWrap}>
-              <Image source={avatarSource} style={styles.avatarCircle} resizeMode="cover" />
+          {/* ── Profile Card ── */}
+          <View style={styles.profileCard}>
+            {/* Header: avatar + name + experience pill */}
+            <View style={styles.profileHeader}>
+              <View style={styles.avatarWrap}>
+                <Image source={avatarSource} style={styles.avatar} resizeMode="cover" />
+                <BadgeCheck size={30} color="#fff" fill="#2D9CDB" style={styles.verifiedBadge} />
+              </View>
+              <View style={styles.headerText}>
+                <Text style={styles.name} numberOfLines={1}>{name}</Text>
+                <Text style={styles.subtitle} numberOfLines={1}>{subtitle || 'Creative Consultant'}</Text>
+                {experience ? (
+                  <View style={styles.expPill}>
+                    <Award size={13} color={colors.primary} />
+                    <Text style={styles.expPillText}>{experience} Years Experience</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
 
-            {/* Details Block */}
-            <View style={styles.detailsBlock}>
-              <Text style={styles.creatorName}>{name}</Text>
-              {subtitle ? (
-                <Text style={styles.creatorSubtitle} numberOfLines={1}>{subtitle}</Text>
-              ) : (
-                <Text style={styles.creatorSubtitle}>Creative Consultant</Text>
-              )}
-              <Text style={styles.detailLine}>Code : {code}</Text>
-              <Text style={styles.detailLine}>Product Code : {productCode}</Text>
-              {expertise ? (
-                <Text style={styles.detailLine}>Expertise : {expertise.split(',')[0]?.trim()}</Text>
-              ) : null}
-              {experience ? (
-                <Text style={styles.detailLine}>Experience : {experience}</Text>
-              ) : null}
+            {/* Stats grid */}
+            <View style={styles.statsGrid}>
+              <View style={[styles.statCol, styles.statDivider]}>
+                <Hash size={18} color={colors.primary} />
+                <Text style={styles.statLabel}>Code</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{code}</Text>
+              </View>
+              <View style={[styles.statCol, styles.statDivider]}>
+                <Box size={18} color={colors.primary} />
+                <Text style={styles.statLabel}>Product Code</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{productCode}</Text>
+              </View>
+              <View style={[styles.statCol, styles.statDivider]}>
+                <Camera size={18} color={colors.primary} />
+                <Text style={styles.statLabel}>Expertise</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{expertiseLabel}</Text>
+              </View>
+              <View style={styles.statCol}>
+                <Award size={18} color={colors.primary} />
+                <Text style={styles.statLabel}>Experience</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{experience ? `${experience} Years` : '—'}</Text>
+              </View>
+            </View>
 
-              {/* Price in green/teal — matching Figma */}
-              {basePrice ? (
-                <Text style={styles.priceLabel}>
-                  Price : <Text style={styles.priceValue}>{basePrice.toLocaleString()} (INR)</Text>
-                </Text>
-              ) : null}
+            {/* Price + verified row */}
+            <View style={styles.priceRow}>
+              <View style={styles.priceLeft}>
+                <View style={styles.tagIconWrap}>
+                  <Tag size={18} color={colors.teal} />
+                </View>
+                <View>
+                  <Text style={styles.priceCaption}>Price</Text>
+                  {basePrice ? (
+                    <Text style={styles.priceValue}>₹ {basePrice.toLocaleString('en-IN')} <Text style={styles.priceUnit}>(INR)</Text></Text>
+                  ) : (
+                    <Text style={styles.priceValue}>On request</Text>
+                  )}
+                </View>
+              </View>
+              <View style={styles.verifiedChip}>
+                <ShieldCheck size={14} color={colors.teal} />
+                <Text style={styles.verifiedChipText}>Verified Creator</Text>
+              </View>
             </View>
           </View>
 
@@ -145,7 +196,11 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
               onPress={() => navigation.navigate('BookConsultant', { consultant: creator })}
               activeOpacity={0.85}
             >
-              <Text style={styles.hireBtnText}>Hire Now →</Text>
+              <Text style={styles.hireBtnText}>Hire Now  →</Text>
+              <View style={styles.hireSubRow}>
+                <ShieldCheck size={13} color="rgba(255,255,255,0.85)" />
+                <Text style={styles.hireSubText}>Secure • Verified • Trusted</Text>
+              </View>
             </TouchableOpacity>
           )}
 
@@ -161,26 +216,39 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
-    paddingBottom: 20,
+    paddingBottom: 28,
   },
 
-  /* ── Category title (Figma: centered, italic-like, dark teal/indigo) ── */
+  /* ── Title row ── */
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  backBtn: {
+    width: 28, height: 28, alignItems: 'center', justifyContent: 'center',
+  },
   categoryTitle: {
-    fontSize: fontSizes.md,
+    fontSize: fontSizes.xl,
     fontFamily: fonts.heavy,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.primary,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
     fontStyle: 'italic',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+  },
+  favBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.cardBg,
+    alignItems: 'center', justifyContent: 'center',
+    ...shadows.sm,
   },
 
   /* ── Large artwork card ── */
   artworkCard: {
     width: '100%',
     aspectRatio: 1.05,
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
     overflow: 'hidden',
     backgroundColor: colors.cardBg,
     borderWidth: 1,
@@ -191,22 +259,38 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  arrowL: {
-    position: 'absolute', left: 0, top: 0, bottom: 0, width: 44,
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.1)',
+  navCircle: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -22,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center', justifyContent: 'center',
+    ...shadows.md,
   },
-  arrowR: {
-    position: 'absolute', right: 0, top: 0, bottom: 0, width: 44,
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.1)',
+  navCircleL: { left: 14 },
+  navCircleR: { right: 14 },
+  counterWrap: {
+    position: 'absolute', left: 0, right: 0, bottom: 14,
+    alignItems: 'center',
+  },
+  counterPill: {
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 14, paddingVertical: 5,
+    borderRadius: radii.full,
+  },
+  counterText: {
+    color: '#fff',
+    fontSize: fontSizes.xs + 1,
+    fontFamily: fonts.heavy,
+    fontWeight: '700',
   },
 
   /* ── Dots ── */
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
     gap: 6,
   },
   dot: {
@@ -215,82 +299,177 @@ const styles = StyleSheet.create({
   },
   dotActive: {
     backgroundColor: colors.primary,
-    width: 18,
+    width: 20,
   },
 
-  /* ── Creator info section (Figma: avatar circle left + text right) ── */
-  creatorSection: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: spacing.md,
-    paddingBottom: spacing.lg,
+  /* ── Profile card ── */
+  profileCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.borderCard,
+    ...shadows.card,
   },
-  avatarCircleWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: colors.border,
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarWrap: {
+    width: 84, height: 84, borderRadius: 42,
+    borderWidth: 3, borderColor: colors.cardBg,
     backgroundColor: colors.inputBg,
     ...shadows.sm,
   },
-  avatarCircle: {
-    width: '100%',
-    height: '100%',
+  avatar: {
+    width: '100%', height: '100%', borderRadius: 42,
   },
-
-  detailsBlock: {
+  verifiedBadge: {
+    position: 'absolute', bottom: -2, right: -2,
+  },
+  headerText: {
     flex: 1,
     marginLeft: spacing.md,
-    paddingTop: 2,
   },
-  creatorName: {
-    fontSize: fontSizes.md,
+  name: {
+    fontSize: fontSizes.xl,
     fontFamily: fonts.heavy,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 1,
+    fontWeight: '800',
+    color: colors.primary,
+    marginBottom: 2,
   },
-  creatorSubtitle: {
-    fontSize: fontSizes.xs + 1,
-    fontFamily: fonts.body,
-    fontStyle: 'italic',
-    color: colors.textSecondary,
-    marginBottom: spacing.xs + 2,
-  },
-  detailLine: {
-    fontSize: fontSizes.xs + 1,
-    fontFamily: fonts.body,
-    color: colors.textSecondary,
-    lineHeight: 17,
-  },
-  priceLabel: {
+  subtitle: {
     fontSize: fontSizes.sm,
+    fontFamily: fonts.body,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  expPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.sectionBg,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: radii.full,
+    borderWidth: 1, borderColor: colors.borderCard,
+  },
+  expPillText: {
+    fontSize: fontSizes.xs + 1,
+    fontFamily: fonts.medium,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+
+  /* ── Stats grid ── */
+  statsGrid: {
+    flexDirection: 'row',
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.borderCard,
+    borderRadius: radii.lg,
+    backgroundColor: colors.sectionBg,
+    paddingVertical: spacing.md,
+  },
+  statCol: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    gap: 4,
+  },
+  statDivider: {
+    borderRightWidth: 1,
+    borderRightColor: colors.borderCard,
+  },
+  statLabel: {
+    fontSize: 9,
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    letterSpacing: 0.2,
+  },
+  statValue: {
+    fontSize: fontSizes.xs + 1,
     fontFamily: fonts.heavy,
     fontWeight: '700',
-    color: colors.textPrimary,
-    marginTop: spacing.xs + 2,
+    color: colors.primary,
+    textAlign: 'center',
+  },
+
+  /* ── Price + verified row ── */
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+    backgroundColor: colors.sectionBg,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+  },
+  priceLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  tagIconWrap: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: '#E0F5F1',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  priceCaption: {
+    fontSize: fontSizes.xs,
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
   },
   priceValue: {
+    fontSize: fontSizes.lg,
+    fontFamily: fonts.heavy,
+    fontWeight: '800',
     color: colors.teal,
-    fontWeight: '700',
+  },
+  priceUnit: {
+    fontSize: fontSizes.xs + 1,
+    fontWeight: '600',
     fontStyle: 'italic',
+  },
+  verifiedChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#E0F5F1',
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderRadius: radii.full,
+  },
+  verifiedChipText: {
+    fontSize: fontSizes.xs + 1,
+    fontFamily: fonts.heavy,
+    fontWeight: '700',
+    color: colors.teal,
   },
 
   /* ── Hire Now CTA ── */
   hireBtn: {
     backgroundColor: '#1B3A5C',
-    borderRadius: 14,
-    paddingVertical: 18,
+    borderRadius: radii.lg,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.lg,
     marginBottom: 24,
+    ...shadows.md,
   },
   hireBtnText: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
     fontFamily: fonts.heavy,
+  },
+  hireSubRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: 5,
+  },
+  hireSubText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: fontSizes.xs + 1,
+    fontFamily: fonts.medium,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 });

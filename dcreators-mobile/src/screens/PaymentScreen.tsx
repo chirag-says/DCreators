@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   Platform, Alert, ActivityIndicator, Animated, Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import {
   ArrowLeft, CheckCircle, CreditCard, Smartphone, Building2,
@@ -35,9 +35,15 @@ export default function PaymentScreen({ navigation, route }: any) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
-  const totalCost = project?.final_offer || project?.budget || 0;
-  const budget = project?.budget ? Number(project.budget) : 0;
-  const advance = Math.round(budget * 0.5);
+  // Cashfree's WebView can fire both the postMessage('success') handler and the
+  // navigation-state handler for the same redirect; guard so verification only runs once.
+  const completionHandledRef = useRef(false);
+
+  // Agreed price is the source of truth (final_offer once negotiated, else the
+  // original budget). Advance is 50% of the AGREED total — not the stale budget,
+  // which would otherwise make advance + balance not sum to the agreed price.
+  const totalCost = Number(project?.final_offer ?? project?.budget ?? 0);
+  const advance = Math.round(totalCost * 0.5);
   const balance = totalCost - advance;
   const payAmount = paymentType === 'advance' ? advance : balance;
 
@@ -62,6 +68,7 @@ export default function PaymentScreen({ navigation, route }: any) {
       catch (err: any) { Alert.alert('Error', err.message); return; }
     }
 
+    completionHandledRef.current = false;
     setIsPaying(true);
     try {
       const order = await createCashfreeOrder({
@@ -152,6 +159,8 @@ export default function PaymentScreen({ navigation, route }: any) {
   }
 
   async function handlePaymentComplete() {
+    if (completionHandledRef.current) return;
+    completionHandledRef.current = true;
     setVerifying(true);
     try {
       const result = await verifyPaymentStatus(currentOrderId);
@@ -375,7 +384,11 @@ export default function PaymentScreen({ navigation, route }: any) {
 
         {/* ── Cashfree WebView Checkout Modal ── */}
         <Modal visible={showWebView} animationType="slide" onRequestClose={() => setShowWebView(false)}>
-          <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }}>
+          {/* Modal is a separate native window — it needs its own SafeAreaProvider
+              so SafeAreaView measures real insets here (otherwise the checkout
+              header slides under the notch / status bar). */}
+          <SafeAreaProvider>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }} edges={['top', 'bottom']}>
             <View style={styles.webViewHeader}>
               <TouchableOpacity
                 onPress={() => {
@@ -410,6 +423,7 @@ export default function PaymentScreen({ navigation, route }: any) {
               )}
             />
           </SafeAreaView>
+          </SafeAreaProvider>
         </Modal>
 
       </SafeAreaView>

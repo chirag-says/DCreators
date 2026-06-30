@@ -16,10 +16,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
-import { updateProjectStatus, fetchProjectSubmissions } from '../services/projectService';
+import { updateProjectStatus, fetchProjectSubmissions, proposeProjectPrice, acceptProjectPrice, closeNegotiation } from '../services/projectService';
+import { sendNotification } from '../lib/notifications';
+import PriceNegotiationCard from '../components/PriceNegotiationCard';
 import {
   FileText, ImageIcon, ChevronRight, Info,
-  ArrowLeft, Lock, Download, Star, MessageCircle,
+  ArrowLeft, Lock, Download, Star, MessageCircle, CheckCircle2,
 } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 import type { Submission } from '../types';
@@ -57,6 +59,16 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
   const status = project?.status || 'assigned';
   const isCompleted = status === 'completed' || status === 'balance_paid' || status === 'delivered';
   const isApproved = status === 'final_approved' || isCompleted;
+  // Pre-work statuses: price negotiation / advance payment — the design
+  // timeline below is not meaningful yet, so we show a dedicated surface.
+  const isNegotiating = status === 'assigned';
+  const isAwaitingAdvance = status === 'advance_pending';
+
+  const consultantDisplayName = project?.consultant_profiles?.display_name || 'the consultant';
+  const [submitting, setSubmitting] = useState(false);
+  // Local mirror of the negotiable price so a counter updates the UI immediately.
+  const [offerAmount, setOfferAmount] = useState<number>(project?.final_offer ?? project?.budget ?? 0);
+  const [offerBy, setOfferBy] = useState<'client' | 'consultant'>(project?.offer_by ?? 'client');
 
   // ─── Fetch all submissions ────────────────────────────────
   const fetchSubmissions = useCallback(async () => {
@@ -86,6 +98,62 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
     : 'Creative Service';
 
   const clientName = project?.client_name || 'Client';
+
+  // ── Price handshake (client side) ─────────────────────────
+  // Accept the consultant's counter-offer → locks price, advances to payment.
+  async function handleAcceptPrice() {
+    if (!project?.id) return;
+    setSubmitting(true);
+    try {
+      await acceptProjectPrice(project.id);
+      if (project.consultant_id) {
+        sendNotification({
+          userId: project.consultant_id,
+          title: 'Offer Accepted',
+          message: `The client accepted your ₹${offerAmount.toLocaleString('en-IN')} offer. They'll pay the advance to begin.`,
+          type: 'assignment',
+        });
+      }
+      navigation.navigate('Payment', { project: { ...project, status: 'advance_pending', final_offer: offerAmount }, paymentType: 'advance' });
+    } catch (err: any) { Alert.alert('Error', err.message); }
+    finally { setSubmitting(false); }
+  }
+
+  // Counter the consultant's price (stays in negotiation).
+  async function handleCounterPrice(amount: number) {
+    if (!project?.id) return;
+    setSubmitting(true);
+    try {
+      await proposeProjectPrice(project.id, amount, 'client');
+      setOfferAmount(amount);
+      setOfferBy('client');
+      if (project.consultant_id) {
+        sendNotification({
+          userId: project.consultant_id,
+          title: 'New Counter-Offer',
+          message: `The client countered at ₹${amount.toLocaleString('en-IN')}. Accept or counter back.`,
+          type: 'assignment',
+        });
+      }
+    } catch (err: any) { Alert.alert('Error', err.message); }
+    finally { setSubmitting(false); }
+  }
+
+  // Cancel the request before any agreement.
+  function handleCancelRequest() {
+    if (!project?.id) return;
+    Alert.alert('Cancel Request', 'Cancel this hire request? This cannot be undone.', [
+      { text: 'Keep', style: 'cancel' },
+      { text: 'Cancel Request', style: 'destructive', onPress: async () => {
+        setSubmitting(true);
+        try {
+          await closeNegotiation(project.id, 'cancelled');
+          navigation.goBack();
+        } catch (err: any) { Alert.alert('Error', err.message); }
+        finally { setSubmitting(false); }
+      }},
+    ]);
+  }
 
   async function handleApproveWorkOrder() {
     if (!project?.id) return;
@@ -126,9 +194,46 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
               Project Assignment - {projectCode}
             </Text>
             <Text style={styles.projectSubtitle}>
-              Incoming Request from "{project?.client_name || 'Client'}"
+              {isNegotiating || isAwaitingAdvance
+                ? `Working with "${consultantDisplayName}"`
+                : `Your project with "${consultantDisplayName}"`}
             </Text>
           </View>
+
+          {/* ── PRICE NEGOTIATION (status: assigned) ── */}
+          {isNegotiating && (
+            <PriceNegotiationCard
+              amount={offerAmount}
+              offerBy={offerBy}
+              myRole="client"
+              otherName={consultantDisplayName}
+              originalBudget={project?.budget}
+              busy={submitting}
+              onAccept={handleAcceptPrice}
+              onCounter={handleCounterPrice}
+              onDecline={handleCancelRequest}
+              declineLabel="Cancel this request"
+              onChat={() => navigation.navigate('Chat', { project, otherName: consultantDisplayName })}
+            />
+          )}
+
+          {/* ── ADVANCE PAYMENT DUE (status: advance_pending) ── */}
+          {isAwaitingAdvance && (
+            <View style={styles.payAdvanceCard}>
+              <CheckCircle2 size={22} color={colors.teal} />
+              <Text style={styles.payAdvanceTitle}>Price agreed at ₹{offerAmount.toLocaleString('en-IN')}</Text>
+              <Text style={styles.payAdvanceSub}>
+                Pay the advance (50%) to start the project. {consultantDisplayName} begins work once it's received.
+              </Text>
+              <TouchableOpacity
+                style={styles.payAdvanceBtn}
+                onPress={() => navigation.navigate('Payment', { project, paymentType: 'advance' })}
+              >
+                <Lock size={15} color="#fff" />
+                <Text style={styles.payAdvanceBtnText}>Pay Advance</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Step 6: Work Order Accepted — client approves to start */}
           {status === 'work_order_accepted' && (
@@ -145,11 +250,14 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
           )}
 
           {/* Category Badge */}
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText}>{assignmentType.toUpperCase()}</Text>
-          </View>
+          {!isNegotiating && !isAwaitingAdvance && (
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryBadgeText}>{assignmentType.toUpperCase()}</Text>
+            </View>
+          )}
 
-          {/* ── Timeline Container ─────────────────────────── */}
+          {/* ── Timeline Container (hidden during pre-work) ── */}
+          {!isNegotiating && !isAwaitingAdvance && (
           <View style={styles.timelineContainer}>
 
             {/* ═══ ROUND 1 ═══ */}
@@ -239,9 +347,10 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
             )}
 
           </View>
+          )}
 
           {/* ── Empty state when no submissions ────────────── */}
-          {submissions.length === 0 && (
+          {!isNegotiating && !isAwaitingAdvance && submissions.length === 0 && (
             <View style={styles.emptyState}>
               <FileText size={48} color={colors.borderInput} />
               <Text style={styles.emptyTitle}>Awaiting First Submission</Text>
@@ -457,6 +566,16 @@ const styles = StyleSheet.create({
   approvalBtnText: { color: '#fff', fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
   viewWoBtn: { borderWidth: 1, borderColor: '#1B3A5C', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   viewWoBtnText: { color: '#1B3A5C', fontSize: fontSizes.base, fontWeight: '600', fontFamily: fonts.medium },
+
+  // Advance-due card (client, advance_pending)
+  payAdvanceCard: {
+    marginHorizontal: spacing.xl, marginBottom: spacing.lg, backgroundColor: '#E0F5F1',
+    borderRadius: radii.lg, padding: spacing.xl, borderWidth: 1, borderColor: colors.teal, gap: spacing.sm,
+  },
+  payAdvanceTitle: { fontSize: fontSizes.lg, fontWeight: '800', fontFamily: fonts.heavy, color: colors.primary },
+  payAdvanceSub: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 20 },
+  payAdvanceBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: colors.success, paddingVertical: 14, borderRadius: radii.md, marginTop: spacing.sm },
+  payAdvanceBtnText: { color: '#fff', fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
 
   // ── Header ──────────────────────────────────────────────────
   headerSection: {

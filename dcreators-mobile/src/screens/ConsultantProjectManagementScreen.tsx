@@ -126,7 +126,7 @@ export default function ConsultantProjectManagementScreen({ navigation }: any) {
     setFormSaving(true);
     try {
       await createProjectNote({
-        consultant_id: consultantProfile.user_id,
+        consultant_id: consultantProfile.id,
         title: formTitle.trim(),
         client_name: formClient.trim() || null,
         target_date: formDate || null,

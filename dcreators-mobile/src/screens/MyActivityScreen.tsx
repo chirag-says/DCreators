@@ -55,7 +55,8 @@ export default function MyActivityScreen({ navigation }: any) {
     if (status === 'advance_pending') {
       navigation.navigate('Payment', { project, paymentType: 'advance' });
     } else if (status === 'advance_paid') {
-      navigation.navigate('GenerateWorkOrder', { project, txnId: '', payAmount: project.final_offer ?? project.budget });
+      const totalCost = Number(project.final_offer ?? project.budget ?? 0);
+      navigation.navigate('GenerateWorkOrder', { project, txnId: '', payAmount: Math.round(totalCost * 0.5) });
     } else {
       navigation.navigate('ClientWorkorder', { project });
     }

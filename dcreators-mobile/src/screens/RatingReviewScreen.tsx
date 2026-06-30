@@ -5,7 +5,6 @@ import { ChevronLeft, Star, Send } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { sendNotification } from '../lib/notifications';
 import { createReview } from '../services/projectService';
-import { fetchConsultantUserId } from '../services/consultantService';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 
 
@@ -47,19 +46,16 @@ export default function RatingReviewScreen({ navigation, route }: any) {
         tags: selectedTags.length > 0 ? selectedTags : null,
       });
 
-      // Notify consultant
+      // Notify consultant (project.consultant_id is already the consultant's auth user_id)
       if (project.consultant_id) {
-        const consultantUserId = await fetchConsultantUserId(project.consultant_id);
-        if (consultantUserId) {
-          sendNotification({
-            userId: consultantUserId,
-            title: `${rating}★ Review Received`,
-            message: review.trim()
-              ? `"${review.trim().substring(0, 80)}..."`
-              : `Client rated your work ${rating}/5 stars.`,
-            type: 'review',
-          });
-        }
+        sendNotification({
+          userId: project.consultant_id,
+          title: `${rating}★ Review Received`,
+          message: review.trim()
+            ? `"${review.trim().substring(0, 80)}..."`
+            : `Client rated your work ${rating}/5 stars.`,
+          type: 'review',
+        });
       }
 
       Alert.alert(

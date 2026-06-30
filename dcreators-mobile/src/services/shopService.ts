@@ -9,6 +9,7 @@ import type { ShopProduct } from '../types';
 /** Shop product with joined consultant info */
 export interface ShopProductWithConsultant extends ShopProduct {
   consultant_profiles?: {
+    user_id: string;
     display_name: string;
     code: string;
   } | null;
@@ -20,7 +21,7 @@ export interface ShopProductWithConsultant extends ShopProduct {
 export async function fetchShopProducts(): Promise<ShopProductWithConsultant[]> {
   const { data, error } = await supabase
     .from('shop_products')
-    .select('*, consultant_profiles(display_name, code)')
+    .select('*, consultant_profiles(user_id, display_name, code)')
     .eq('is_active', true)
     .order('created_at', { ascending: false });
 

@@ -1,10 +1,12 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Platform, ScrollView, KeyboardAvoidingView, ActivityIndicator, Alert } from 'react-native';
+﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Platform, FlatList, KeyboardAvoidingView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Send, Paperclip, Check, X } from 'lucide-react-native';
+import { ChevronLeft, Send, Paperclip } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
-import { acceptBidCandidate, declineBidCandidate } from '../services/bidService';
+import { supabase } from '../lib/supabase';
+import PriceNegotiationCard from '../components/PriceNegotiationCard';
+import { acceptBidCandidate, declineBidCandidate, counterBidPrice, fetchBidCandidateById } from '../services/bidService';
 import {
   fetchMessages as fetchMessagesService,
   sendMessage,
@@ -13,6 +15,26 @@ import {
   type Message,
   type MessageScopeColumn,
 } from '../services/messageService';
+
+type ChatRow =
+  | { kind: 'header'; key: string; label: string }
+  | { kind: 'message'; key: string; msg: Message; isMe: boolean };
+
+const MessageBubble = React.memo(function MessageBubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
+  return (
+    <View style={[styles.messageWrapper, isMe ? styles.messageMe : styles.messageThem]}>
+      <View style={[styles.messageBubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
+        <Text style={[styles.messageText, isMe && styles.messageTextMe]}>{msg.text}</Text>
+      </View>
+      <Text style={styles.timeText}>{formatTime(msg.created_at)}</Text>
+    </View>
+  );
+});
+
+function formatTime(dateStr: string) {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
 
 export default function ChatScreen({ navigation, route }: any) {
   const project = route?.params?.project;
@@ -33,18 +55,36 @@ export default function ChatScreen({ navigation, route }: any) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [deciding, setDeciding] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  // Live bid-candidate state (price + who proposed) for the negotiation handshake.
+  const [candidate, setCandidate] = useState<{ id: string; quoted_price: number; offer_by: 'client' | 'consultant'; status: string } | null>(null);
+  const listRef = useRef<FlatList<ChatRow>>(null);
 
   useEffect(() => {
     fetchMessages();
     // Subscribe to new messages via realtime
     const channel = subscribeToMessages(entityColumn, entityId, (message) => {
       setMessages((prev) => [...prev, message]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     });
 
     return () => { unsubscribeFromMessages(channel); };
   }, []);
+
+  // Bid mode: load the candidate's live price/offer state and keep it in sync
+  // (realtime) so both sides see counter-offers as they happen.
+  useEffect(() => {
+    if (!isBidMode || !bidCandidateId) return;
+    let active = true;
+    const loadCandidate = () => {
+      fetchBidCandidateById(bidCandidateId).then(c => { if (active) setCandidate(c as any); });
+    };
+    loadCandidate();
+    const ch = supabase
+      .channel(`bid_candidate:${bidCandidateId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bid_candidates', filter: `id=eq.${bidCandidateId}` }, loadCandidate)
+      .subscribe();
+    return () => { active = false; supabase.removeChannel(ch); };
+  }, [isBidMode, bidCandidateId]);
 
   async function fetchMessages() {
     if (!entityId) { setLoading(false); return; }
@@ -54,7 +94,7 @@ export default function ChatScreen({ navigation, route }: any) {
     } catch {}
     finally {
       setLoading(false);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 200);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 200);
     }
   }
 
@@ -70,14 +110,35 @@ export default function ChatScreen({ navigation, route }: any) {
     finally { setSending(false); }
   }
 
+  // Accept the price on the table (either party). Creates the project at
+  // advance_pending; route each role to their own project surface.
   async function handleAccept() {
     if (!bidCandidateId || deciding) return;
     setDeciding(true);
     try {
       const newProject = await acceptBidCandidate(bidCandidateId);
-      navigation.navigate('Main', { screen: 'CreatorWorkorder', params: { project: newProject } });
+      if (currentRole === 'consultant') {
+        navigation.navigate('Main', { screen: 'CreatorWorkorder', params: { project: newProject } });
+      } else {
+        navigation.navigate('ClientWorkorder', { project: newProject });
+      }
     } catch (e: any) {
-      Alert.alert('Error', e.message ?? 'Could not accept this bid.');
+      Alert.alert('Error', e.message ?? 'Could not accept this offer.');
+    } finally {
+      setDeciding(false);
+    }
+  }
+
+  // Counter with a new price (either party). Stays in negotiation.
+  async function handleCounter(amount: number) {
+    if (!bidCandidateId || !currentRole || deciding) return;
+    setDeciding(true);
+    try {
+      await counterBidPrice(bidCandidateId, amount, currentRole);
+      const c = await fetchBidCandidateById(bidCandidateId);
+      setCandidate(c as any);
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Could not send counter-offer.');
     } finally {
       setDeciding(false);
     }
@@ -103,11 +164,6 @@ export default function ChatScreen({ navigation, route }: any) {
     ]);
   }
 
-  function formatTime(dateStr: string) {
-    const d = new Date(dateStr);
-    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-  }
-
   function formatDateHeader(dateStr: string) {
     const d = new Date(dateStr);
     const today = new Date();
@@ -118,18 +174,31 @@ export default function ChatScreen({ navigation, route }: any) {
     return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
-  // Group messages by date
-  const groupedMessages: { date: string; msgs: any[] }[] = [];
-  let lastDate = '';
-  messages.forEach((msg) => {
-    const dateKey = new Date(msg.created_at).toDateString();
-    if (dateKey !== lastDate) {
-      groupedMessages.push({ date: dateKey, msgs: [msg] });
-      lastDate = dateKey;
-    } else {
-      groupedMessages[groupedMessages.length - 1].msgs.push(msg);
+  // Flatten messages into date-header + message rows for FlatList rendering
+  const rows = useMemo<ChatRow[]>(() => {
+    const out: ChatRow[] = [];
+    let lastDate = '';
+    messages.forEach((msg) => {
+      const dateKey = new Date(msg.created_at).toDateString();
+      if (dateKey !== lastDate) {
+        out.push({ kind: 'header', key: `header-${dateKey}`, label: formatDateHeader(msg.created_at) });
+        lastDate = dateKey;
+      }
+      out.push({ kind: 'message', key: msg.id, msg, isMe: msg.sender_id === profile?.id });
+    });
+    return out;
+  }, [messages, profile?.id]);
+
+  const renderRow = useCallback(({ item }: { item: ChatRow }) => {
+    if (item.kind === 'header') {
+      return (
+        <View style={styles.dateHeader}>
+          <Text style={styles.dateHeaderText}>{item.label}</Text>
+        </View>
+      );
     }
-  });
+    return <MessageBubble msg={item.msg} isMe={item.isMe} />;
+  }, []);
 
   const assignmentLabel = isBidMode
     ? `Negotiating · ₹${(quotedPrice ?? 0).toLocaleString('en-IN')}`
@@ -137,9 +206,10 @@ export default function ChatScreen({ navigation, route }: any) {
       ? `${project.assignment_type?.charAt(0).toUpperCase()}${project.assignment_type?.slice(1) || ''}`
       : 'Assignment';
 
-  // Per spec, accept/decline on a negotiation belongs to the consultant —
-  // the client's role here is to discuss, not unilaterally close it out.
-  const showDecisionStrip = isBidMode && currentRole === 'consultant';
+  // Symmetric handshake: whoever is looking at the OTHER party's pending offer
+  // can Accept or Counter; the consultant can additionally pass to the next
+  // candidate. Only while the candidate is still open (pending/negotiating).
+  const showOfferCard = isBidMode && !!candidate && ['pending', 'negotiating'].includes(candidate.status);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.cardBg }]} edges={['top']}>
@@ -158,64 +228,39 @@ export default function ChatScreen({ navigation, route }: any) {
             <View style={{ width: 36 }} />
           </View>
 
-          {showDecisionStrip && (
-            <View style={styles.decisionStrip}>
-              <TouchableOpacity
-                style={[styles.decisionBtn, styles.declineBtn, deciding && { opacity: 0.6 }]}
-                onPress={handleDecline}
-                disabled={deciding}
-                activeOpacity={0.85}
-              >
-                <X size={15} color="#fff" />
-                <Text style={styles.decisionBtnText}>Decline</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.decisionBtn, styles.acceptBtn, deciding && { opacity: 0.6 }]}
-                onPress={handleAccept}
-                disabled={deciding}
-                activeOpacity={0.85}
-              >
-                {deciding ? <ActivityIndicator size="small" color="#fff" /> : <><Check size={15} color="#fff" /><Text style={styles.decisionBtnText}>Accept</Text></>}
-              </TouchableOpacity>
-            </View>
+          {showOfferCard && (
+            <PriceNegotiationCard
+              amount={candidate!.quoted_price}
+              offerBy={candidate!.offer_by}
+              myRole={(currentRole as 'client' | 'consultant') ?? 'client'}
+              otherName={otherName}
+              busy={deciding}
+              onAccept={handleAccept}
+              onCounter={handleCounter}
+              onDecline={currentRole === 'consultant' ? handleDecline : undefined}
+              declineLabel="Decline & pass to next"
+            />
           )}
 
           {/* Messages */}
           {loading ? (
             <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
           ) : (
-            <ScrollView
-              ref={scrollRef}
+            <FlatList
+              ref={listRef}
               style={styles.chatScroll}
               contentContainerStyle={styles.chatContainer}
               showsVerticalScrollIndicator={false}
-              onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
-            >
-              {messages.length === 0 && (
+              data={rows}
+              keyExtractor={(item) => item.key}
+              renderItem={renderRow}
+              onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+              ListEmptyComponent={
                 <View style={styles.emptyChat}>
                   <Text style={styles.emptyChatText}>No messages yet. Start the conversation! 💬</Text>
                 </View>
-              )}
-
-              {groupedMessages.map((group) => (
-                <View key={group.date}>
-                  <View style={styles.dateHeader}>
-                    <Text style={styles.dateHeaderText}>{formatDateHeader(group.msgs[0].created_at)}</Text>
-                  </View>
-                  {group.msgs.map((msg) => {
-                    const isMe = msg.sender_id === profile?.id;
-                    return (
-                      <View key={msg.id} style={[styles.messageWrapper, isMe ? styles.messageMe : styles.messageThem]}>
-                        <View style={[styles.messageBubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-                          <Text style={[styles.messageText, isMe && styles.messageTextMe]}>{msg.text}</Text>
-                        </View>
-                        <Text style={styles.timeText}>{formatTime(msg.created_at)}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              ))}
-            </ScrollView>
+              }
+            />
           )}
 
           {/* Input Area */}
@@ -278,7 +323,7 @@ const styles = StyleSheet.create({
   decisionBtnText: { color: '#fff', fontSize: fontSizes.sm + 1, fontWeight: '700', fontFamily: fonts.heavy },
 
   chatScroll: { flex: 1 },
-  chatContainer: { padding: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xl },
+  chatContainer: { padding: spacing.lg, paddingBottom: spacing.xl },
 
   emptyChat: { alignItems: 'center', marginTop: 60, padding: spacing.xl },
   emptyChatText: { fontSize: fontSizes.base, color: colors.textTertiary, fontFamily: fonts.body, textAlign: 'center' },

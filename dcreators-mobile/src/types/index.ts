@@ -87,7 +87,15 @@ export interface Project {
   // `deadline`, which is the delivery deadline for the finished work.
   event_date: string | null;
   budget: number;
-  final_offer: number | null;    // negotiated price (set in CONSULTANT_NEGOTIATION_SCREEN)
+  // The CURRENT proposed/agreed price under negotiation. Starts equal to
+  // `budget` (client's opening offer); updated as either side counters; frozen
+  // once `price_agreed` is true. Read as `final_offer ?? budget` everywhere.
+  final_offer: number | null;
+  // Who made the current pending price proposal. null only on drafts.
+  offer_by: 'client' | 'consultant' | null;
+  // True once both parties accepted the same price. Gates advance payment:
+  // `assigned -> advance_pending` is only legal when this is true.
+  price_agreed: boolean;
   status: ProjectStatus;
   progress_percent: number;
   work_order_data: Record<string, unknown> | null; // immutable after work_order_generated
@@ -118,7 +126,8 @@ export interface BidCandidate {
   bid_request_id: string;
   consultant_id: string; // consultant_profiles.id — NOT auth user_id
   priority_rank: number;
-  quoted_price: number;
+  quoted_price: number;        // CURRENT proposed/agreed price for this candidate
+  offer_by: 'client' | 'consultant'; // who made the current pending proposal
   status: BidCandidateStatus;
   project_id: string | null; // set once accepted
   created_at: string;

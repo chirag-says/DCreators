@@ -87,7 +87,10 @@ export default function BookConsultantScreen({ navigation, route }: any) {
         status: 'assigned',
         progress_percent: 0,
         work_order_data: null,
-        final_offer: null,
+        // Client's budget is the opening offer in the price handshake.
+        final_offer: budgetNum,
+        offer_by: 'client',
+        price_agreed: false,
       });
 
       sendNotification({
@@ -97,7 +100,8 @@ export default function BookConsultantScreen({ navigation, route }: any) {
         type: 'assignment',
       });
 
-      navigation.navigate('Main', { screen: 'CreatorWorkorder', params: { project: data } });
+      // CLIENT waits on their own project view for the consultant's response.
+      navigation.navigate('ClientWorkorder', { project: data });
     } catch (e: any) {
       if (e?.code === '23503') {
         Alert.alert('Error', 'Consultant profile not found. Please try again.');

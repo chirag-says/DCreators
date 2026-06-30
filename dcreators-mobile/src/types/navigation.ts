@@ -107,7 +107,7 @@ export type RootStackParamList = {
   SavedCreators: undefined;
   RatingReview: { project: Project };
   Shop: undefined;
-  ProductDetails: { product: ShopProduct & { consultant_profiles?: { display_name: string; code: string } } };
+  ProductDetails: { product: ShopProduct & { consultant_profiles?: { user_id: string; display_name: string; code: string } } };
   MessagesList: undefined;
   MyProducts: undefined;
   AddEditProduct: { product?: ShopProduct } | undefined;

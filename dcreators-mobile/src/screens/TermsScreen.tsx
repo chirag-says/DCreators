@@ -9,7 +9,7 @@ export default function TermsScreen({ navigation }: any) {
   const [accepted, setAccepted] = useState(false);
 
   return (
-    <View style={styles.bg}>
+    <View style={styles.backgroundImage}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <TopHeader />
         

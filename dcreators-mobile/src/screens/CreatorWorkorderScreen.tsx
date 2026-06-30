@@ -12,14 +12,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
-import { updateProjectStatus, fetchProjectSubmissions, createSubmission, createCollaborationRequest } from '../services/projectService';
+import { updateProjectStatus, fetchProjectSubmissions, createSubmission, createCollaborationRequest, proposeProjectPrice, acceptProjectPrice, closeNegotiation } from '../services/projectService';
 import { fetchApprovedConsultants } from '../services/consultantService';
 import { sendNotification } from '../lib/notifications';
+import PriceNegotiationCard from '../components/PriceNegotiationCard';
 import * as ImagePicker from 'expo-image-picker';
 import {
   FileText, ImageIcon, Info, X, ImagePlus, Upload,
   MessageCircle, Download, Users, BadgeCheck,
-  CalendarClock, CheckCircle2, Handshake,
+  CalendarClock, CheckCircle2,
 } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 import type { Submission, ConsultantProfile } from '../types';
@@ -50,10 +51,10 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [proposedAmount, setProposedAmount] = useState(project?.final_offer ? String(project.final_offer) : '');
-  const [proposedDeadline, setProposedDeadline] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [showNegotiateForm, setShowNegotiateForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false); // price handshake in-flight
+  // Local mirror of the negotiable price so a counter updates the UI without a refetch.
+  const [offerAmount, setOfferAmount] = useState<number>(project?.final_offer ?? project?.budget ?? 0);
+  const [offerBy, setOfferBy] = useState<'client' | 'consultant'>(project?.offer_by ?? 'client');
   const [collaborators, setCollaborators] = useState<ConsultantProfile[]>([]);
   const [selectedCollab, setSelectedCollab] = useState<ConsultantProfile | null>(null);
   const [loadingCollab, setLoadingCollab] = useState(false);
@@ -176,27 +177,70 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
   }
 
 
-  async function handleSubmitOffer() {
-    const amount = parseFloat(proposedAmount.replace(/[^0-9.]/g, ''));
-    if (!amount || amount <= 0) { Alert.alert('Invalid', 'Enter a valid proposed amount.'); return; }
+  // ── Price handshake (consultant side) ─────────────────────
+  // Accept the client's proposed price → locks it & moves to advance payment.
+  async function handleAcceptPrice() {
     if (!project?.id) return;
     setSubmitting(true);
     try {
-      // assigned → advance_pending; merge final_offer in the same atomic update
-      await updateProjectStatus(project.id, 'advance_pending', { final_offer: amount });
+      await acceptProjectPrice(project.id);
       if (project.client_id) {
         sendNotification({
           userId: project.client_id,
-          title: 'Consultant Offer Received',
-          message: `Your consultant submitted an offer of ₹${amount.toLocaleString('en-IN')}. Please pay the advance.`,
+          title: 'Consultant Accepted',
+          message: `Your consultant accepted at ₹${offerAmount.toLocaleString('en-IN')}. Pay the advance to start the project.`,
           type: 'assignment',
         });
       }
-      Alert.alert('Offer Submitted ✅', `Offer of ₹${amount.toLocaleString('en-IN')} sent. Awaiting client advance payment.`, [
+      Alert.alert('Accepted ✅', `Locked at ₹${offerAmount.toLocaleString('en-IN')}. Waiting for the client to pay the advance.`, [
         { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Dashboard' }) },
       ]);
     } catch (err: any) { Alert.alert('Error', err.message); }
     finally { setSubmitting(false); }
+  }
+
+  // Counter the client's price with your own number (stays in negotiation).
+  async function handleCounterPrice(amount: number) {
+    if (!project?.id) return;
+    setSubmitting(true);
+    try {
+      await proposeProjectPrice(project.id, amount, 'consultant');
+      setOfferAmount(amount);
+      setOfferBy('consultant');
+      if (project.client_id) {
+        sendNotification({
+          userId: project.client_id,
+          title: 'New Counter-Offer',
+          message: `Your consultant countered at ₹${amount.toLocaleString('en-IN')}. Accept or counter back.`,
+          type: 'assignment',
+        });
+      }
+    } catch (err: any) { Alert.alert('Error', err.message); }
+    finally { setSubmitting(false); }
+  }
+
+  // Pass on a direct-hire assignment (no priority list to fall back to).
+  function handlePass() {
+    if (!project?.id) return;
+    Alert.alert('Pass on Project', 'Decline this assignment? This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Pass on', style: 'destructive', onPress: async () => {
+        setSubmitting(true);
+        try {
+          await closeNegotiation(project.id, 'rejected');
+          if (project.client_id) {
+            sendNotification({
+              userId: project.client_id,
+              title: 'Assignment Declined',
+              message: 'Your consultant passed on this assignment. You can hire another creative.',
+              type: 'assignment',
+            });
+          }
+          navigation.goBack();
+        } catch (err: any) { Alert.alert('Error', err.message); }
+        finally { setSubmitting(false); }
+      }},
+    ]);
   }
 
   async function fetchCollaborators() {
@@ -309,97 +353,37 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
             </View>
           </View>
 
-          {/* ── 4 ACTION BUTTONS (Figma screen 10) ── */}
+          {/* ── PRICE NEGOTIATION (status: assigned) ── */}
           {status === 'assigned' && (
-            <View style={styles.actionBtnGroup}>
-              {/* Accept Project — navy filled pill */}
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnAccept, submitting && { opacity: 0.6 }]}
-                onPress={handleSubmitOffer}
-                disabled={submitting}
-                activeOpacity={0.85}
-              >
-                {submitting
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <>
-                <CheckCircle2 size={18} color="#fff" />
-                      <Text style={styles.actionBtnAcceptText}>Accept Project</Text>
-                    </>
-                }
-              </TouchableOpacity>
-
-              {/* Negotiate — teal outline pill */}
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnNegotiate]}
-                onPress={() => setShowNegotiateForm(v => !v)}
-                activeOpacity={0.85}
-              >
-                <Handshake size={18} color={colors.teal} />
-                <Text style={styles.actionBtnNegotiateText}>Negotiate</Text>
-              </TouchableOpacity>
-
-              {/* Collaborate — gray outline pill */}
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnCollab]}
-                onPress={() => { setShowCollab(true); if (collaborators.length === 0) fetchCollaborators(); }}
-                activeOpacity={0.85}
-              >
-                <Users size={18} color={colors.primary} />
-                <Text style={styles.actionBtnCollabText}>Collaborate</Text>
-              </TouchableOpacity>
-
-              {/* Pass on — red outline chip */}
-              <TouchableOpacity
-                style={styles.actionBtnPassOn}
-                onPress={() => Alert.alert('Pass on Project', 'Decline this assignment?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Pass on', style: 'destructive', onPress: async () => {
-                    try {
-                      await updateProjectStatus(project.id, 'assigned');
-                      navigation.goBack();
-                    } catch {}
-                  }},
-                ])}
-                activeOpacity={0.85}
-              >
-                <X size={16} color="#EF4444" />
-                <Text style={styles.actionBtnPassOnText}>Pass on</Text>
-              </TouchableOpacity>
-            </View>
+            <PriceNegotiationCard
+              amount={offerAmount}
+              offerBy={offerBy}
+              myRole="consultant"
+              otherName={project?.client_name || 'the client'}
+              originalBudget={budget}
+              busy={submitting}
+              onAccept={handleAcceptPrice}
+              onCounter={handleCounterPrice}
+              onDecline={handlePass}
+              declineLabel="Pass on this project"
+              onChat={() => navigation.navigate('Chat', { project, otherName: project?.client_name || 'Client' })}
+            />
           )}
 
-          {/* Negotiate form (shown inline when Negotiate tapped) */}
-          {(isNegotiation && showNegotiateForm) && (
-            <View style={styles.negotiationCard}>
-              <Text style={styles.sectionLabel}>Negotiable amount</Text>
-              <View style={styles.amountInputRow}>
-                <Text style={styles.rupee}>₹</Text>
-                <TextInput
-                  style={styles.amountField}
-                  placeholder="Enter your proposed amount"
-                  placeholderTextColor={colors.textTertiary}
-                  value={proposedAmount}
-                  onChangeText={setProposedAmount}
-                  keyboardType="decimal-pad"
-                />
-              </View>
-              <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Suggested Deadline</Text>
-              <TextInput
-                style={styles.deadlineField}
-                placeholder="00/00/2026 — Day — 00"
-                placeholderTextColor={colors.textTertiary}
-                value={proposedDeadline}
-                onChangeText={setProposedDeadline}
-              />
+          {/* ── PRICE AGREED, awaiting client advance (status: advance_pending) ── */}
+          {status === 'advance_pending' && (
+            <View style={styles.awaitingCard}>
+              <CheckCircle2 size={22} color={colors.teal} />
+              <Text style={styles.awaitingTitle}>Price agreed at ₹{offerAmount.toLocaleString('en-IN')}</Text>
+              <Text style={styles.awaitingSub}>
+                Waiting for {project?.client_name || 'the client'} to pay the advance. The project starts once the advance is received.
+              </Text>
               <TouchableOpacity
-                style={[styles.submitOfferBtn, submitting && { opacity: 0.6 }]}
-                onPress={handleSubmitOffer}
-                disabled={submitting}
+                style={styles.awaitingChatBtn}
+                onPress={() => navigation.navigate('Chat', { project, otherName: project?.client_name || 'Client' })}
               >
-                {submitting
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.submitOfferBtnText}>Submit Offer</Text>
-                }
+                <MessageCircle size={15} color="#fff" />
+                <Text style={styles.awaitingChatText}>Message Client</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -756,6 +740,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 18, backgroundColor: '#fff',
   },
   actionBtnPassOnText: { color: '#EF4444', fontSize: fontSizes.sm + 1, fontWeight: '700', fontFamily: fonts.heavy },
+
+  // Price-agreed / awaiting-advance card (consultant, advance_pending)
+  awaitingCard: {
+    marginHorizontal: spacing.xl, marginBottom: spacing.lg, backgroundColor: '#E0F5F1',
+    borderRadius: radii.lg, padding: spacing.xl, borderWidth: 1, borderColor: colors.teal, gap: spacing.sm,
+  },
+  awaitingTitle: { fontSize: fontSizes.lg, fontWeight: '800', fontFamily: fonts.heavy, color: colors.primary },
+  awaitingSub: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 20 },
+  awaitingChatBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: colors.teal, paddingVertical: 12, borderRadius: radii.md, marginTop: spacing.sm },
+  awaitingChatText: { color: '#fff', fontSize: fontSizes.sm + 1, fontWeight: '700', fontFamily: fonts.heavy },
 
 
   // Modal

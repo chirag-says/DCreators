@@ -128,9 +128,13 @@ export default function AssignProjectScreen({ navigation, route }: any) {
     if (deadline.trim()) {
       payload.deadline = deadline.trim();
     }
-    // Direct hire: attach consultant immediately → status = 'assigned'
+    // Direct hire: attach consultant immediately → status = 'assigned'.
+    // The client's budget is the OPENING offer in the price handshake.
     if (consultant?.user_id) {
       payload.consultant_id = consultant.user_id;
+      payload.final_offer = budgetNum;
+      payload.offer_by = 'client';
+      payload.price_agreed = false;
     }
     return payload;
   }
@@ -156,8 +160,11 @@ export default function AssignProjectScreen({ navigation, route }: any) {
       const data = await createProject(payload);
 
       if (consultant) {
-        // DIRECT HIRE: go to the unified Project Dashboard with assigned status
-        navigation.navigate('Main', { screen: 'CreatorWorkorder', params: { project: data } });
+        // DIRECT HIRE: the CLIENT goes to their own project view to await the
+        // consultant's response (accept / counter). The consultant gets it on
+        // their dashboard. (Was wrongly sending the client to the consultant's
+        // CreatorWorkorder "Accept Project" screen.)
+        navigation.navigate('ClientWorkorder', { project: data });
       } else {
         // BIDDING PATH: go to CLIENT_CONSULTANT_MATCHING_SCREEN
         navigation.navigate('ConsultantMatching', { project: data });

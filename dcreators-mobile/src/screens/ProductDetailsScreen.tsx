@@ -1,16 +1,20 @@
 ﻿import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Platform, Dimensions, Image } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Platform, Dimensions, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Share2, Heart, ShoppingBag, CheckCircle, ShieldCheck, ChevronRight } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { useAuthStore } from '../store/useAuthStore';
+import { createArtworkOrder } from '../services/artworkService';
 
 
 const { width } = Dimensions.get('window');
 
 export default function ProductDetailsScreen({ navigation, route }: any) {
   const product = route?.params?.product;
+  const profile = useAuthStore((s) => s.profile);
   const [isFav, setIsFav] = useState(false);
   const [activeImage, setActiveImage] = useState(0);
+  const [buying, setBuying] = useState(false);
 
   const title = product?.title || 'Product';
   const description = product?.description || 'No description available.';
@@ -19,6 +23,27 @@ export default function ProductDetailsScreen({ navigation, route }: any) {
   const images = product?.images?.filter((url: string) => url && url.length > 0) || [];
   const consultantName = product?.consultant_profiles?.display_name || 'Consultant';
   const consultantCode = product?.consultant_profiles?.code || '---';
+  const artistUserId = product?.consultant_profiles?.user_id;
+
+  async function handleBuyNow() {
+    if (!profile?.id) { Alert.alert('Error', 'Please sign in to buy this artwork.'); return; }
+    if (!product?.id || !artistUserId) { Alert.alert('Error', 'This artwork is missing seller details.'); return; }
+
+    setBuying(true);
+    try {
+      const order = await createArtworkOrder({
+        artwork_id: product.id,
+        buyer_id: profile.id,
+        artist_id: artistUserId,
+        artwork_price: price,
+      });
+      navigation.navigate('ArtworkOrderTracking', { orderId: order.id });
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Could not submit purchase request.');
+    } finally {
+      setBuying(false);
+    }
+  }
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.cardBg }]} edges={['top']}>
@@ -110,8 +135,11 @@ export default function ProductDetailsScreen({ navigation, route }: any) {
             <Text style={{ fontSize: fontSizes.xs + 1, color: colors.textTertiary, fontFamily: fonts.body }}>Price</Text>
             <Text style={{ fontSize: fontSizes.xl, fontWeight: '800', color: colors.textPrimary, fontFamily: fonts.heavy }}>₹{price.toLocaleString()}</Text>
           </View>
-          <TouchableOpacity style={styles.buyBtn}>
-            <Text style={styles.buyBtnText}>Buy Now</Text>
+          <TouchableOpacity style={[styles.buyBtn, buying && { opacity: 0.6 }]} onPress={handleBuyNow} disabled={buying}>
+            {buying
+              ? <ActivityIndicator color={colors.textOnPrimary} size="small" />
+              : <Text style={styles.buyBtnText}>Buy Now</Text>
+            }
           </TouchableOpacity>
         </View>
 
