@@ -115,6 +115,12 @@ export type RootStackParamList = {
   MessagesList: undefined;
   MyProducts: undefined;
   AddEditProduct: { product?: ShopProduct } | undefined;
+  // Pushed from Dashboard / Search / SavedCreators. On the stack, not the tab
+  // navigator, so their back buttons have somewhere to pop to.
+  CreatorProfile: { creator: CreatorCardViewModel };
+  // owner_role: CLIENT  workflow: BIDDING PATH (no consultant pre-selected)
+  //                     or DIRECT HIRE (consultant pre-loaded via creator param)
+  AssignProject: { consultant?: CreatorCardViewModel } | undefined;
 };
 
 // ─── Main Tab Navigator ──────────────────────────────────────
@@ -122,10 +128,7 @@ export type MainTabParamList = {
   Dashboard: undefined;
   Search: undefined;
   History: undefined;
-  CreatorProfile: { creator: CreatorCardViewModel };
-  // owner_role: CLIENT  workflow: BIDDING PATH (no consultant pre-selected)
-  // owner_role: CLIENT  workflow: DIRECT HIRE (consultant pre-loaded via creator param)
-  AssignProject: { consultant?: CreatorCardViewModel } | undefined;
+  // CreatorProfile and AssignProject live on the root stack — see below.
   FloatingQuery: undefined;
   CreatorWorkorder: { project: Project };
   // owner_role: CLIENT  bottom-nav tab: bidding entry point + active projects/bids

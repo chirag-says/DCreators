@@ -93,8 +93,9 @@ function MainTabs() {
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="History" component={HistoryScreen} />
-      <Tab.Screen name="CreatorProfile" component={CreatorProfileScreen} />
-      <Tab.Screen name="AssignProject" component={AssignProjectScreen} />
+      {/* CreatorProfile and AssignProject moved to the stack below — they are
+          detail screens, not tabs, and a tab navigator has no history for
+          their back buttons to pop. */}
       <Tab.Screen name="FloatingQuery" component={FloatingQueryScreen} />
       <Tab.Screen name="CreatorWorkorder" component={CreatorWorkorderScreen} />
       <Tab.Screen name="MyActivity" component={MyActivityScreen} />
@@ -141,6 +142,11 @@ export default function App() {
           <Stack.Screen name="Main" component={MainTabs} />
 
           {/* Sub-screens (Bottom Nav hidden automatically when pushed) */}
+          {/* Pushed detail screens: reached with a plain navigate() from tab
+              screens, which bubbles up to this stack, so back/swipe/hardware
+              back all pop correctly. */}
+          <Stack.Screen name="CreatorProfile" component={CreatorProfileScreen} />
+          <Stack.Screen name="AssignProject" component={AssignProjectScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="EditProfile" component={EditProfileScreen} />
           <Stack.Screen name="EditConsultantProfile" component={EditConsultantProfileScreen} />
