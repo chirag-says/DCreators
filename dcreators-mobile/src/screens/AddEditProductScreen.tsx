@@ -120,6 +120,9 @@ export default function AddEditProductScreen({ navigation, route }: any) {
         images,
         consultant_id: consultantProfile.id,
         is_active: true,
+        // This is the sale flow. Showcase pieces are added from the home
+        // Profile tab and are capped at five; listings are not.
+        kind: 'listing' as const,
       };
 
       if (isEditing) {

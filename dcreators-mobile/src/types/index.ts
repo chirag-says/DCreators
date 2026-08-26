@@ -183,6 +183,8 @@ export interface ShopProduct {
   images: string[] | null;
   category: string | null;
   is_active: boolean;
+  /** 'showcase' = portfolio piece (home Profile tab); 'listing' = for sale (SALES tab). */
+  kind: 'showcase' | 'listing';
   created_at: string;
 }
 

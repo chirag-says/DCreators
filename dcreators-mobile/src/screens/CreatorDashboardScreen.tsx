@@ -3,10 +3,15 @@
  * Role: CONSULTANT | Figma: "Creators Dashboard - Final.png"
  *
  * Toggle at top:
- *   "Sales Dashboard"   → things for sale: artwork listings (shop_products) +
- *                          incoming purchase requests (artwork_orders)
+ *   "Profile"           → how the creator presents themselves: a preview of
+ *                          their public profile plus the showcase, up to five
+ *                          best works (shop_products where kind='showcase')
  *   "Project Dashboard" → things being worked on: active project/service
  *                          assignments (projects table)
+ *
+ * Selling is NOT here. Sale listings and purchase requests live on the SALES
+ * tab (ConsultantEarningsHistoryScreen); this screen is about winning work,
+ * that one is about moving artwork.
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import {
@@ -14,7 +19,7 @@ import {
   Image, ActivityIndicator, Alert, Platform, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Edit3, Trash2, Plus, Briefcase } from 'lucide-react-native';
+import { Edit3, Trash2, Plus, Briefcase, Eye } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import TopHeader from '../components/TopHeader';
@@ -27,8 +32,8 @@ const ORANGE = '#E87B35';
 const TEAL   = '#3D9B8F';
 const BG     = '#EDF1F5';
 
-/** Portfolio/listing cap. Mirrors MAX_SLOTS in ConsultantPortfolioUpdateScreen. */
-const MAX_LISTINGS = 5;
+/** Showcase cap. Mirrors MAX_SLOTS in ConsultantPortfolioUpdateScreen. */
+const MAX_SHOWCASE = 5;
 
 /**
  * Badge text per project status. "assigned" reads ACTIVE because the section
@@ -58,8 +63,11 @@ export default function CreatorDashboardScreen({ navigation }: any) {
   const consultantProfile = useAuthStore(s => s.consultantProfile);
   const profile           = useAuthStore(s => s.profile);
 
-  // "Sales Dashboard" | "Project Dashboard" toggle (Figma top pills)
-  const [activeTab, setActiveTab] = useState<'sales' | 'portfolio'>('portfolio');
+  // "Profile" | "Project Dashboard" toggle. The left pill used to be "Sales
+  // Dashboard"; selling moved to the SALES tab in the bottom nav, and what
+  // remains here is the creator's showcase — the work that convinces a client
+  // to hire them.
+  const [activeTab, setActiveTab] = useState<'profile' | 'portfolio'>('portfolio');
 
   const [products,   setProducts]   = useState<any[]>([]);
   const [projects,   setProjects]   = useState<any[]>([]);
@@ -81,7 +89,8 @@ export default function CreatorDashboardScreen({ navigation }: any) {
   async function fetchProducts() {
     if (!consultantProfile?.id) { setLoading(false); return; }
     try {
-      const data = await fetchConsultantProducts(consultantProfile.id);
+      // Showcase only. Sale listings live on the SALES tab now.
+      const data = await fetchConsultantProducts(consultantProfile.id, undefined, 'showcase');
       setProducts(data);
     } catch { setProducts([]); }
     finally { setLoading(false); }
@@ -120,10 +129,31 @@ export default function CreatorDashboardScreen({ navigation }: any) {
   const firstName = (consultantProfile?.display_name || profile?.name || '').trim().split(/\s+/)[0];
   const dashboardTitle = firstName ? `${firstName}'s Dashboard` : "Creator's Dashboard";
 
+  // Shaped exactly like the view model CreatorProfileScreen receives from the
+  // client dashboard and search, so the preview renders the real screen with
+  // real data rather than an approximation of it.
+  const publicProfilePreview = {
+    id: consultantProfile?.id ?? '',
+    user_id: consultantProfile?.user_id ?? profile?.id ?? '',
+    name: consultantProfile?.display_name ?? profile?.name ?? 'Creator',
+    code: consultantProfile?.code ?? '',
+    subtitle: consultantProfile?.subtitle ?? '',
+    experience: consultantProfile?.experience != null ? String(consultantProfile.experience) : '',
+    expertise: consultantProfile?.expertise ?? '',
+    avatar_public_id: consultantProfile?.category ?? 'designer',
+    avatar_url: profile?.avatar_url ?? null,
+    portfolio_images: consultantProfile?.portfolio_images ?? null,
+    portfolio_card_image: consultantProfile?.portfolio_card_image ?? null,
+    portfolio_banner_image: consultantProfile?.portfolio_banner_image ?? null,
+    category: consultantProfile?.category ?? 'designer',
+    base_price: consultantProfile?.base_price ?? null,
+    is_approved: consultantProfile?.is_approved ?? false,
+  };
+
   // How many artwork slots are left of the five. At zero the Add button goes
   // grey and stops responding, so the cap is visible before it is hit.
-  const slotsLeft = Math.max(0, MAX_LISTINGS - products.length);
-  const canAddListing = slotsLeft > 0;
+  const showcaseSlotsLeft = Math.max(0, MAX_SHOWCASE - products.length);
+  const canAddShowcase = showcaseSlotsLeft > 0;
 
   // ── Shared header used by both tabs (Figma "Project Dashboard" look) ──
   return (
@@ -135,14 +165,14 @@ export default function CreatorDashboardScreen({ navigation }: any) {
           when the profile has no name yet (fresh signup, offline first load). */}
       <Text style={s.dashTitle}>{dashboardTitle}</Text>
 
-      {/* Sales Dashboard / Project Dashboard toggle pills */}
+      {/* Profile / Project Dashboard toggle pills */}
       <View style={s.toggleRow}>
         <TouchableOpacity
-          style={[s.toggleBtn, activeTab === 'sales' && s.toggleBtnActive]}
-          onPress={() => setActiveTab('sales')}
+          style={[s.toggleBtn, activeTab === 'profile' && s.toggleBtnActive]}
+          onPress={() => setActiveTab('profile')}
           activeOpacity={0.8}
         >
-          <Text style={[s.toggleLabel, activeTab === 'sales' && s.toggleLabelActive]}>Sales Dashboard</Text>
+          <Text style={[s.toggleLabel, activeTab === 'profile' && s.toggleLabelActive]}>Profile</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.toggleBtn, activeTab === 'portfolio' && s.toggleBtnActive]}
@@ -159,20 +189,35 @@ export default function CreatorDashboardScreen({ navigation }: any) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={TEAL} />}
       >
 
-        {activeTab === 'sales' ? (
+        {activeTab === 'profile' ? (
           <>
-            {/* Things for sale: artwork listings */}
+            {/* See yourself the way a client sees you, before deciding what to
+                change. Reuses the real client-facing profile screen rather than
+                a mock of it, so the preview cannot drift from the thing. */}
+            <TouchableOpacity
+              style={s.previewBtn}
+              onPress={() => navigation.navigate('CreatorProfile', { creator: publicProfilePreview })}
+              activeOpacity={0.85}
+            >
+              <Eye size={16} color={NAVY} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.previewTitle}>View my public profile</Text>
+                <Text style={s.previewSub}>See exactly what clients see before you hire out</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* The showcase: best work, there to win the hire. Not the shop. */}
             <View style={s.listHeader}>
-              <Text style={s.listTitle}>My Artwork Listings</Text>
+              <Text style={s.listTitle}>My Showcase</Text>
               <TouchableOpacity
-                style={[s.addBtn, !canAddListing && s.addBtnDisabled]}
+                style={[s.addBtn, !canAddShowcase && s.addBtnDisabled]}
                 onPress={() => navigation.navigate('ConsultantPortfolioUpdate')}
-                disabled={!canAddListing}
+                disabled={!canAddShowcase}
                 activeOpacity={0.85}
               >
-                <Plus size={16} color={canAddListing ? '#fff' : '#9CA3AF'} />
-                <Text style={[s.addBtnText, !canAddListing && s.addBtnTextDisabled]}>
-                  {canAddListing ? `${slotsLeft} Add` : 'All 5 added'}
+                <Plus size={16} color={canAddShowcase ? '#fff' : '#9CA3AF'} />
+                <Text style={[s.addBtnText, !canAddShowcase && s.addBtnTextDisabled]}>
+                  {canAddShowcase ? `${showcaseSlotsLeft} Add` : 'All 5 added'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -181,15 +226,15 @@ export default function CreatorDashboardScreen({ navigation }: any) {
               <ActivityIndicator size="large" color={TEAL} style={{ marginTop: 40 }} />
             ) : products.length === 0 ? (
               <View style={s.emptyWrap}>
-                <Text style={s.emptyTitle}>No listings yet</Text>
-                <Text style={s.emptySub}>Add your first artwork to start selling</Text>
+                <Text style={s.emptyTitle}>No showcase work yet</Text>
+                <Text style={s.emptySub}>Add up to five of your best pieces so clients can judge your work</Text>
                 <TouchableOpacity
                   style={s.emptyBtn}
                   onPress={() => navigation.navigate('ConsultantPortfolioUpdate')}
                   activeOpacity={0.85}
                 >
                   <Plus size={16} color="#fff" />
-                  <Text style={s.emptyBtnText}>Add Artwork</Text>
+                  <Text style={s.emptyBtnText}>Add Showcase Work</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -394,6 +439,14 @@ const s = StyleSheet.create({
   addBtnText: { color: '#fff', fontSize: fontSizes.sm, fontWeight: '700', fontFamily: fonts.heavy },
   addBtnDisabled: { backgroundColor: '#E5E7EB' },
   addBtnTextDisabled: { color: '#9CA3AF' },
+
+  previewBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 18,
+    borderWidth: 1, borderColor: '#E8EAF0',
+  },
+  previewTitle: { fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy, color: NAVY },
+  previewSub: { fontSize: fontSizes.xs, fontFamily: fonts.body, color: colors.textSecondary, marginTop: 2 },
 
   productList: { gap: 16 },
   productCard: {

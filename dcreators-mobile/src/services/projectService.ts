@@ -230,10 +230,19 @@ export async function fetchConsultantDashboardProjects(consultantUserId: string)
   return (data ?? []) as ProjectWithClient[];
 }
 
-/** Statuses shown as "ongoing" on the consultant project-management screen. */
+/**
+ * Statuses shown as "ongoing" on the consultant project-management screen.
+ *
+ * Derived from CONSULTANT_ACTIVE_STATUSES rather than hand-listed. The two
+ * used to be written out separately and had drifted: this list started at
+ * `work_order_accepted`, so a project sitting at `assigned`, `advance_pending`,
+ * `advance_paid` or `work_order_generated` appeared on the consultant's home
+ * dashboard but was invisible in the PROJECTS tab. Anything the home screen
+ * counts as active belongs here too, plus the later states home does not track.
+ */
 const MANAGEMENT_ONGOING_STATUSES: ProjectStatus[] = [
-  'work_order_accepted', 'in_progress', 'review_1', 'review_2',
-  'final_review', 'final_approved', 'balance_pending', 'balance_paid',
+  ...CONSULTANT_ACTIVE_STATUSES,
+  'final_approved', 'balance_pending', 'balance_paid',
 ];
 
 /** Fetch a consultant's ongoing projects for the project-management screen, with client name joined. */

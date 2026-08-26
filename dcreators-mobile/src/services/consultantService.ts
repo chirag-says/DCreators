@@ -261,6 +261,10 @@ export async function syncConsultantPortfolioImages(consultantId: string, maxSlo
     .from('shop_products')
     .select('images, image_variants')
     .eq('consultant_id', consultantId)
+    // Showcase only: the public profile carousel, featured card and explore
+    // banner are meant to show curated best work, not whatever was last put
+    // up for sale.
+    .eq('kind', 'showcase')
     .order('created_at', { ascending: false })
     .limit(maxSlots);
 

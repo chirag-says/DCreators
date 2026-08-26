@@ -37,12 +37,25 @@ export async function fetchShopProducts(): Promise<ShopProductWithConsultant[]> 
  * Fetch a consultant's own portfolio products (most recent first).
  * Pass `limit` to cap results (e.g. portfolio slots); omit for the full list.
  */
-export async function fetchConsultantProducts(consultantId: string, limit?: number): Promise<ShopProduct[]> {
+export async function fetchConsultantProducts(
+  consultantId: string,
+  limit?: number,
+  /**
+   * 'showcase' = portfolio pieces (home Profile tab), 'listing' = artwork for
+   * sale (SALES tab). Omit to get both, which is what the public-facing
+   * profile surfaces want.
+   */
+  kind?: 'showcase' | 'listing',
+): Promise<ShopProduct[]> {
   let request = supabase
     .from('shop_products')
     .select('*')
     .eq('consultant_id', consultantId)
     .order('created_at', { ascending: false });
+
+  if (kind) {
+    request = request.eq('kind', kind);
+  }
 
   if (limit) {
     request = request.limit(limit);

@@ -89,7 +89,7 @@ export default function ConsultantPortfolioUpdateScreen({ navigation, route }: a
     if (!consultantProfile?.id) { setLoading(false); return; }
     setLoading(true);
     try {
-      const data = await fetchConsultantProducts(consultantProfile.id, MAX_SLOTS);
+      const data = await fetchConsultantProducts(consultantProfile.id, MAX_SLOTS, 'showcase');
       setExisting(data);
     } catch {}
     finally { setLoading(false); }
@@ -144,6 +144,9 @@ export default function ConsultantPortfolioUpdateScreen({ navigation, route }: a
 
       const payload = {
         consultant_id:  consultantProfile.id,
+        // This screen is the showcase flow. Sale listings are created from the
+        // SALES tab and must not land in the five portfolio slots.
+        kind:           'showcase' as const,
         title:          slot.title.trim(),
         size:           formatSize(slot),
         medium:         slot.medium.trim() || null,
