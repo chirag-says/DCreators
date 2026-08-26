@@ -6,13 +6,15 @@
 --   supabase migration repair --status applied <the 22 pre-August versions>
 --   supabase db push
 --
--- Safe to re-run: every statement is idempotent (IF EXISTS / IF NOT EXISTS /
--- ON CONFLICT DO NOTHING / CREATE OR REPLACE).
+-- Safe to re-run and safe to fail: everything is inside one transaction and
+-- every statement is idempotent (IF EXISTS / IF NOT EXISTS / CREATE OR
+-- REPLACE / ON CONFLICT DO NOTHING). An aborted run changes nothing.
 --
--- PART A records the 22 migrations that were applied by hand months ago but
---        never recorded, so the CLI stops seeing them as pending. No DDL.
--- PART B applies the three new migrations.
--- PART C records those three.
+-- PART 0 creates the migration history table the CLI expects.
+-- PART A records the 22 migrations applied by hand months ago but never
+--        recorded, so the CLI stops seeing them as pending. No DDL.
+-- PART B applies the four new migrations.
+-- PART C records those four.
 -- ============================================================================
 
 BEGIN;
@@ -23,8 +25,8 @@ BEGIN;
 -- do not exist yet and PART A would fail with:
 --   ERROR 42P01: relation "supabase_migrations.schema_migrations" does not exist
 --
--- Columns match what the CLI expects. Only `version` is required; the rest are
--- added separately so this also repairs a partially-created table.
+-- Only `version` is required; the rest are added separately so this also
+-- repairs a partially-created table.
 CREATE SCHEMA IF NOT EXISTS supabase_migrations;
 
 CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
@@ -37,8 +39,8 @@ ALTER TABLE supabase_migrations.schema_migrations ADD COLUMN IF NOT EXISTS creat
 ALTER TABLE supabase_migrations.schema_migrations ADD COLUMN IF NOT EXISTS idempotency_key text;
 
 -- ── PART A: baseline the existing history ───────────────────────────────────
--- These migrations are already live in the database. This only writes their
--- version numbers into the history table. It changes no schema and no data.
+-- These migrations are already live. This only writes their version numbers
+-- into the history table. It changes no schema and no data.
 INSERT INTO supabase_migrations.schema_migrations (version) VALUES
   ('20260628120100'), ('20260628120200'), ('20260628120300'), ('20260628120400'),
   ('20260628120500'), ('20260628120600'), ('20260628120700'), ('20260628120800'),
@@ -141,19 +143,65 @@ COMMENT ON VIEW consultant_ratings IS
 -- so an invoker-rights view is readable by both roles without widening anything.
 GRANT SELECT ON consultant_ratings TO authenticated, anon;
 
--- ── PART C: record the three new migrations ─────────────────────────────────
+-- ── PART B: 20260826120400_secure_legacy_archive_tables ─────────────────
+-- Close the hole left by the legacy archive tables.
+--
+-- drop_legacy_creators_portfolios.sql preserved the old data with
+--   CREATE TABLE public._archive_creators   AS TABLE public.creators;
+--   CREATE TABLE public._archive_portfolios AS TABLE public.portfolios;
+-- which was the right call for recoverability, but CREATE TABLE AS does not
+-- enable row level security, and Supabase's default privileges on schema
+-- public grant anon and authenticated on newly created tables. Both archives
+-- therefore sit in an exposed schema, readable through PostgREST by anyone
+-- with a session — the same failure shape as the payments policy in June,
+-- arrived at from the opposite direction.
+--
+-- Deny rather than drop: the archives exist so the legacy rows can be
+-- recovered, and destroying a backup to fix an access-control bug trades one
+-- problem for a worse one. RLS enabled with zero policies is default-deny for
+-- every role except service_role and the table owner, which is exactly the
+-- access the recovery path needs.
+--
+-- To actually discard the data later:
+--   DROP TABLE IF EXISTS public._archive_portfolios, public._archive_creators;
+
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['_archive_creators', '_archive_portfolios'] LOOP
+    IF EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = t
+    ) THEN
+      EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);
+      EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+      EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', t);
+      RAISE NOTICE 'Secured public.% (revoked grants, RLS on, no policies).', t;
+    ELSE
+      RAISE NOTICE 'public.% not present — nothing to secure.', t;
+    END IF;
+  END LOOP;
+END $$;
+
+-- ── PART C: record the four new migrations ──────────────────────────────────
 INSERT INTO supabase_migrations.schema_migrations (version) VALUES
-  ('20260826120100'), ('20260826120200'), ('20260826120300')
+  ('20260826120100'), ('20260826120200'), ('20260826120300'), ('20260826120400')
 ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
 
--- ── Verify (run separately, after COMMIT) ───────────────────────────────────
--- Expect 25 rows, newest last:
---   SELECT version FROM supabase_migrations.schema_migrations ORDER BY version;
--- Expect the over-permissive payments policy to be GONE and the notifications
--- INSERT policy to be PRESENT:
---   SELECT tablename, policyname, cmd FROM pg_policies
---    WHERE tablename IN ('payments','notifications') ORDER BY tablename, policyname;
--- Expect the ratings view to answer (0 rows is fine, it means no reviews yet):
---   SELECT * FROM consultant_ratings;
+-- ── Verify (run these separately, AFTER the COMMIT succeeds) ────────────────
+-- 1. Expect 26 rows, newest last:
+--    SELECT version FROM supabase_migrations.schema_migrations ORDER BY version;
+--
+-- 2. Expect NO "Service role manages all payments" row, and one notifications
+--    INSERT policy:
+--    SELECT tablename, policyname, cmd FROM pg_policies
+--     WHERE tablename IN ('payments','notifications') ORDER BY tablename, policyname;
+--
+-- 3. Expect the ratings view to answer (0 rows is fine — no reviews yet):
+--    SELECT * FROM consultant_ratings;
+--
+-- 4. Expect rowsecurity = true for both archive tables:
+--    SELECT tablename, rowsecurity FROM pg_tables
+--     WHERE schemaname='public' AND tablename LIKE '\_archive%';
