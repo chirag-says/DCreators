@@ -17,6 +17,25 @@
 
 BEGIN;
 
+-- ── PART 0: bootstrap the migration history table ───────────────────────────
+-- The CLI creates this on its first successful `db push`. This project has
+-- never had one (every migration was applied by hand), so the schema and table
+-- do not exist yet and PART A would fail with:
+--   ERROR 42P01: relation "supabase_migrations.schema_migrations" does not exist
+--
+-- Columns match what the CLI expects. Only `version` is required; the rest are
+-- added separately so this also repairs a partially-created table.
+CREATE SCHEMA IF NOT EXISTS supabase_migrations;
+
+CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
+  version text NOT NULL PRIMARY KEY
+);
+
+ALTER TABLE supabase_migrations.schema_migrations ADD COLUMN IF NOT EXISTS statements text[];
+ALTER TABLE supabase_migrations.schema_migrations ADD COLUMN IF NOT EXISTS name text;
+ALTER TABLE supabase_migrations.schema_migrations ADD COLUMN IF NOT EXISTS created_by text;
+ALTER TABLE supabase_migrations.schema_migrations ADD COLUMN IF NOT EXISTS idempotency_key text;
+
 -- ── PART A: baseline the existing history ───────────────────────────────────
 -- These migrations are already live in the database. This only writes their
 -- version numbers into the history table. It changes no schema and no data.
