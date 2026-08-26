@@ -16,6 +16,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, radii } from '../styles/theme';
 import MonthCalendar from '../components/MonthCalendar';
 import { createBidRequest } from '../services/bidService';
+import { CREATIVE_ITEMS } from '../lib/assignment';
 import type { ConsultantCategory } from '../types';
 
 const NAVY = '#1B3A5C';
@@ -33,17 +34,20 @@ export default function CreateBidScreen({ navigation }: any) {
   const profile = useAuthStore(s => s.profile);
 
   const [category, setCategory] = useState<ConsultantCategory | null>(null);
+  // The concrete deliverable. Becomes the assignment title the consultant sees
+  // on every screen, so a bid-born project is no longer called "Hire Designer".
+  const [creativeItem, setCreativeItem] = useState<string | null>(null);
   const [brief, setBrief] = useState('');
   const [eventDate, setEventDate] = useState<string | null>(null);
   const [budget, setBudget] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const budgetNum = Number(budget.replace(/[^0-9]/g, '')) || 0;
-  const canSubmit = !!category && brief.trim().length > 10 && !!eventDate && budgetNum > 0;
+  const canSubmit = !!category && !!creativeItem && brief.trim().length > 10 && !!eventDate && budgetNum > 0;
 
   async function handleSubmit() {
-    if (!profile?.id || !canSubmit || !category) {
-      Alert.alert('Missing Info', 'Pick a category, date, budget, and add a brief (10+ characters).');
+    if (!profile?.id || !canSubmit || !category || !creativeItem) {
+      Alert.alert('Missing Info', 'Pick a category, what you need made, a date, a budget, and add a brief (10+ characters).');
       return;
     }
     setSubmitting(true);
@@ -51,6 +55,7 @@ export default function CreateBidScreen({ navigation }: any) {
       const bidRequest = await createBidRequest({
         client_id: profile.id,
         category,
+        creative_item: creativeItem,
         assignment_brief: brief.trim(),
         event_date: eventDate,
         budget: budgetNum,
@@ -96,6 +101,24 @@ export default function CreateBidScreen({ navigation }: any) {
             );
           })}
         </View>
+
+        <Text style={[s.sectionLabel, { marginTop: 20 }]}>WHAT SHOULD WE CALL IT?</Text>
+        <View style={s.chipWrap}>
+          {CREATIVE_ITEMS.map(item => {
+            const active = creativeItem === item;
+            return (
+              <TouchableOpacity
+                key={item}
+                style={[s.chip, active && s.chipActive]}
+                onPress={() => setCreativeItem(item)}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.chipText, active && s.chipTextActive]}>{item}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={s.hint}>This becomes the assignment title your consultant sees.</Text>
 
         <Text style={[s.sectionLabel, { marginTop: 20 }]}>ASSIGNMENT BRIEF</Text>
         <TextInput

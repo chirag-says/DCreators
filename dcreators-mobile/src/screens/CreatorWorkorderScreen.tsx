@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
-import { updateProjectStatus, fetchProjectSubmissions, createSubmission, createCollaborationRequest, proposeProjectPrice, acceptProjectPrice, closeNegotiation } from '../services/projectService';
+import { updateProjectStatus, fetchProjectSubmissions, createSubmission, createCollaborationRequest, proposeProjectPrice, acceptProjectPrice, closeNegotiation, fetchProjectById } from '../services/projectService';
 import { fetchApprovedConsultants } from '../services/consultantService';
 import { sendNotification } from '../lib/notifications';
 import PriceNegotiationCard from '../components/PriceNegotiationCard';
@@ -20,8 +20,9 @@ import * as ImagePicker from 'expo-image-picker';
 import {
   FileText, ImageIcon, Info, X, ImagePlus, Upload,
   MessageCircle, Download, Users, BadgeCheck,
-  CalendarClock, CheckCircle2,
+  CalendarClock, CheckCircle2, IndianRupee,
 } from 'lucide-react-native';
+import { getAssignmentTitle } from '../lib/assignment';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 import type { Submission, ConsultantProfile } from '../types';
 
@@ -47,14 +48,22 @@ const ROUND_META: Record<string, { label: string; uploadLabel: string; submitLab
 };
 
 export default function CreatorWorkorderScreen({ navigation, route }: any) {
-  const project = route?.params?.project;
+  // This is a Tab.Screen, so it stays mounted once visited. Opening a second
+  // assignment swaps route.params but does NOT remount, which means anything
+  // derived from `project` via useState keeps the FIRST assignment's value.
+  // That is what leaked one project's counter-offer onto another. Everything
+  // below re-syncs on id change instead of only at mount.
+  const routeProject = route?.params?.project;
+  const projectId = routeProject?.id;
+  const [project, setProject] = useState<any>(routeProject);
+
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [submitting, setSubmitting] = useState(false); // price handshake in-flight
   // Local mirror of the negotiable price so a counter updates the UI without a refetch.
-  const [offerAmount, setOfferAmount] = useState<number>(project?.final_offer ?? project?.budget ?? 0);
-  const [offerBy, setOfferBy] = useState<'client' | 'consultant'>(project?.offer_by ?? 'client');
+  const [offerAmount, setOfferAmount] = useState<number>(routeProject?.final_offer ?? routeProject?.budget ?? 0);
+  const [offerBy, setOfferBy] = useState<'client' | 'consultant'>(routeProject?.offer_by ?? 'client');
   const [collaborators, setCollaborators] = useState<ConsultantProfile[]>([]);
   const [selectedCollab, setSelectedCollab] = useState<ConsultantProfile | null>(null);
   const [loadingCollab, setLoadingCollab] = useState(false);
@@ -65,14 +74,48 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
   const [uploadNote, setUploadNote] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
+  // Pull the authoritative row so a price the client moved while this screen
+  // was mounted shows up, instead of trusting the params snapshot forever.
+  // Merge over the previous object: fetchProjectById selects the columns only,
+  // and callers pass extras like `client_name` that must survive the refresh.
+  const refreshProject = useCallback(async () => {
+    if (!projectId) return;
+    const fresh = await fetchProjectById(projectId);
+    if (!fresh) return;
+    setProject((prev: any) => ({ ...prev, ...fresh }));
+    setOfferAmount(fresh.final_offer ?? fresh.budget ?? 0);
+    setOfferBy(((fresh as any).offer_by as 'client' | 'consultant') ?? 'client');
+  }, [projectId]);
+
+  // Instant re-sync from params when a different assignment is opened, so
+  // there is no flash of the previous project's price before the fetch lands.
+  useEffect(() => {
+    if (!projectId) return;
+    setProject(routeProject);
+    setOfferAmount(routeProject?.final_offer ?? routeProject?.budget ?? 0);
+    setOfferBy(routeProject?.offer_by ?? 'client');
+    setSubmitting(false);
+    setShowCollab(false);
+    setUploadRound(null);
+    setUploadFiles([]);
+    setUploadNote('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  useEffect(() => {
+    refreshProject();
+    const unsub = navigation.addListener('focus', refreshProject);
+    return unsub;
+  }, [navigation, refreshProject]);
+
   const projectCode = project
     ? `D/${new Date(project.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '/')}`
     : 'D/--/--/--';
 
   const status = project?.status || 'assigned';
-  const assignmentType = project?.assignment_type
-    ? project.assignment_type.charAt(0).toUpperCase() + project.assignment_type.slice(1).replace(/_/g, ' ')
-    : 'Creative Service';
+  // What the job is called. The consultant already knows their own role, so
+  // `assignment_type` ("Hire Designer") is never shown as a title here.
+  const assignmentTitle = getAssignmentTitle(project);
   const budget = project?.budget ? Number(project.budget) : 0;
   const deadlineFormatted = (() => {
     if (!project?.deadline) return 'Not set';
@@ -192,9 +235,12 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
           type: 'assignment',
         });
       }
-      Alert.alert('Accepted ✅', `Locked at ₹${offerAmount.toLocaleString('en-IN')}. Waiting for the client to pay the advance.`, [
-        { text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'Dashboard' }) },
-      ]);
+      // Land on a real confirmation screen instead of an alert that vanishes:
+      // the consultant needs a record of the terms they just committed to.
+      navigation.navigate('AssignmentAccepted', {
+        project: { ...project, status: 'advance_pending', price_agreed: true },
+        agreedAmount: offerAmount,
+      });
     } catch (err: any) { Alert.alert('Error', err.message); }
     finally { setSubmitting(false); }
   }
@@ -282,9 +328,15 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
 
           {/* Screen title */}
           <Text style={styles.screenTitle}>Project{'\n'}Dashboard</Text>
+
+          {/* The assignment title leads. "Incoming Request from <Client>" used
+              to sit here, which told the consultant nothing about the job, and
+              the real title was repeated twice further down as a category chip
+              plus a heading. One title, once, at the top. */}
           <View style={styles.headerSection}>
             <Text style={styles.projectTitle}>Project Assignment - {projectCode}</Text>
-            <Text style={styles.projectSubtitle}>Incoming Request from "{project?.client_name || 'Client'}"</Text>
+            <Text style={styles.assignmentTitle}>{assignmentTitle}</Text>
+            <Text style={styles.projectSubtitle}>From {project?.client_name || 'Client'}</Text>
           </View>
 
           {/* Mode banner */}
@@ -301,20 +353,14 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
             </View>
           )}
 
-          {/* ── Project info card (Figma screen 10 layout) ── */}
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText}>
-              {(project?.assignment_type ?? 'CREATIVE SERVICE').toUpperCase()}
-            </Text>
-          </View>
-
-          <Text style={styles.projectMainTitle}>
-            {project?.assignment_details?.[0] || assignmentType}
-          </Text>
-
-          {/* Budget card */}
+          {/* Budget card. Every info block below carries an icon + label header
+              in the same style, so the section reads as one set rather than a
+              mix of iconned and un-iconned cards. */}
           <View style={styles.budgetCard}>
-            <Text style={styles.budgetLabel}>ESTIMATED BUDGET</Text>
+            <View style={styles.briefBlockHeader}>
+              <IndianRupee size={14} color={colors.primary} />
+              <Text style={styles.briefBlockTitle}>ESTIMATED BUDGET</Text>
+            </View>
             <Text style={styles.budgetValue}>₹{budget.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
           </View>
 
@@ -342,20 +388,21 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
             </View>
           )}
 
-          {/* Deadline row */}
-          <View style={styles.deadlineRow}>
-            <View style={styles.deadlineIcon}>
-              <CalendarClock size={16} color={colors.textSecondary} />
+          {/* Deadline — a card like the others, not a bare row */}
+          <View style={styles.deadlineCard}>
+            <View style={styles.briefBlockHeader}>
+              <CalendarClock size={14} color={colors.primary} />
+              <Text style={styles.briefBlockTitle}>DEADLINE</Text>
             </View>
-            <View>
-              <Text style={styles.deadlineLabel}>DEADLINE</Text>
-              <Text style={styles.deadlineValue}>{deadlineFormatted}</Text>
-            </View>
+            <Text style={styles.deadlineValue}>{deadlineFormatted}</Text>
           </View>
 
           {/* ── PRICE NEGOTIATION (status: assigned) ── */}
           {status === 'assigned' && (
             <PriceNegotiationCard
+              // Remount per assignment: the card owns `mode` and `counterValue`
+              // internally, which would otherwise carry over from the last project.
+              key={projectId}
               amount={offerAmount}
               offerBy={offerBy}
               myRole="consultant"
@@ -378,6 +425,12 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
               <Text style={styles.awaitingSub}>
                 Waiting for {project?.client_name || 'the client'} to pay the advance. The project starts once the advance is received.
               </Text>
+              <TouchableOpacity
+                style={styles.awaitingPayBtn}
+                onPress={() => navigation.navigate('AssignmentPayment', { project, agreedAmount: offerAmount })}
+              >
+                <Text style={styles.awaitingPayText}>Track Payment</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.awaitingChatBtn}
                 onPress={() => navigation.navigate('Chat', { project, otherName: project?.client_name || 'Client' })}
@@ -676,17 +729,10 @@ const styles = StyleSheet.create({
   releaseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.teal, paddingVertical: 16, borderRadius: radii.lg },
   releaseBtnText: { color: colors.textOnPrimary, fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy },
 
-  // ── NEW Figma screen 10 styles ────────────────────────────
-  categoryBadge: {
-    alignSelf: 'flex-start', marginLeft: spacing.xl, marginBottom: spacing.sm,
-    backgroundColor: '#E0F5F1', paddingVertical: 5, paddingHorizontal: 12,
-    borderRadius: 20, borderWidth: 1, borderColor: '#3D9B8F',
-  },
-  categoryBadgeText: { fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy, color: '#3D9B8F', letterSpacing: 0.5 },
-
-  projectMainTitle: {
-    fontSize: 22, fontWeight: '800', fontFamily: fonts.heavy, color: colors.primary,
-    lineHeight: 30, paddingHorizontal: spacing.xl, marginBottom: 16,
+  // ── Assignment header + info cards ────────────────────────
+  assignmentTitle: {
+    fontSize: 24, fontWeight: '800', fontFamily: fonts.heavy, color: colors.primary,
+    lineHeight: 31, marginTop: 4, marginBottom: 4,
   },
 
   budgetCard: {
@@ -694,7 +740,6 @@ const styles = StyleSheet.create({
     marginBottom: 16, borderWidth: 1, borderColor: colors.border,
     ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4 }, android: { elevation: 1 } }),
   },
-  budgetLabel: { fontSize: 10, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textTertiary, letterSpacing: 0.8, marginBottom: 6 },
   budgetValue: { fontSize: 28, fontWeight: '900', fontFamily: fonts.heavy, color: colors.primary },
 
   briefBlock: {
@@ -714,13 +759,11 @@ const styles = StyleSheet.create({
   deliverableIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#EEF9F8', borderWidth: 1, borderColor: '#3D9B8F' },
   deliverableText: { flex: 1, fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textPrimary, lineHeight: 20 },
 
-  deadlineRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    marginHorizontal: spacing.xl, marginBottom: 20,
+  deadlineCard: {
+    marginHorizontal: spacing.xl, backgroundColor: '#fff', borderRadius: 14, padding: 18,
+    marginBottom: 20, borderWidth: 1, borderColor: colors.border,
   },
-  deadlineIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  deadlineLabel: { fontSize: 10, fontWeight: '700', fontFamily: fonts.heavy, color: '#3D9B8F', letterSpacing: 0.8, marginBottom: 2 },
-  deadlineValue: { fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy, color: colors.primary },
+  deadlineValue: { fontSize: fontSizes.lg, fontWeight: '700', fontFamily: fonts.heavy, color: colors.primary },
 
   // Action button group
   actionBtnGroup: { paddingHorizontal: spacing.xl, marginBottom: 20, gap: 12 },
@@ -750,6 +793,8 @@ const styles = StyleSheet.create({
   awaitingSub: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 20 },
   awaitingChatBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: colors.teal, paddingVertical: 12, borderRadius: radii.md, marginTop: spacing.sm },
   awaitingChatText: { color: '#fff', fontSize: fontSizes.sm + 1, fontWeight: '700', fontFamily: fonts.heavy },
+  awaitingPayBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: radii.md, borderWidth: 1.5, borderColor: colors.teal, backgroundColor: '#fff', marginTop: spacing.sm },
+  awaitingPayText: { color: colors.teal, fontSize: fontSizes.sm + 1, fontWeight: '700', fontFamily: fonts.heavy },
 
 
   // Modal

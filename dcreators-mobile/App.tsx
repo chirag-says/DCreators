@@ -36,6 +36,8 @@ import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import CreatorWorkorderScreen from './src/screens/CreatorWorkorderScreen';
+import AssignmentAcceptedScreen from './src/screens/AssignmentAcceptedScreen';
+import AssignmentPaymentScreen from './src/screens/AssignmentPaymentScreen';
 import InvoiceScreen from './src/screens/InvoiceScreen';
 import SavedCreatorsScreen from './src/screens/SavedCreatorsScreen';
 import RatingReviewScreen from './src/screens/RatingReviewScreen';
@@ -153,6 +155,9 @@ export default function App() {
           <Stack.Screen name="GenerateWorkOrder" component={GenerateWorkOrderScreen} />
           <Stack.Screen name="ConsultantWorkOrder" component={ConsultantWorkOrderScreen} />
           <Stack.Screen name="RateConsultant" component={RateConsultantScreen} />
+          {/* Consultant post-acceptance: confirmation, then per-project money view */}
+          <Stack.Screen name="AssignmentAccepted" component={AssignmentAcceptedScreen} />
+          <Stack.Screen name="AssignmentPayment" component={AssignmentPaymentScreen} />
 
           {/* Phase 4 — Product B: Artwork Marketplace */}
           <Stack.Screen name="ArtistSalesRequest" component={ArtistSalesRequestScreen} />

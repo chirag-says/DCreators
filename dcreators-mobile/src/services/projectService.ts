@@ -635,7 +635,7 @@ export async function createCollaborationRequest(request: {
 export async function fetchCompletedProjectsForEarnings(consultantUserId: string): Promise<any[]> {
   const { data, error } = await supabase
     .from('projects')
-    .select('id, assignment_brief, final_offer, budget, updated_at, client:profiles!client_id(name)')
+    .select('id, assignment_type, assignment_details, assignment_brief, final_offer, budget, updated_at, client:profiles!client_id(name)')
     .eq('consultant_id', consultantUserId)
     .eq('status', 'completed')
     .order('updated_at', { ascending: false });

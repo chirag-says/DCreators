@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, Dimensions, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, Heart, Award, Tag, ShieldCheck, Box, Camera, Hash, BadgeCheck } from 'lucide-react-native';
@@ -6,6 +6,8 @@ import TopHeader from '../components/TopHeader';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
+import RatingStars from '../components/RatingStars';
+import { fetchConsultantRatings, type ConsultantRating } from '../services/consultantService';
 
 
 const { width } = Dimensions.get('window');
@@ -34,6 +36,19 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
   const creator = route?.params?.creator;
   const [activeImage, setActiveImage] = useState(0);
   const [fav, setFav] = useState(false);
+
+  // Rating is fetched rather than passed in: the card view models that lead
+  // here are built in several places and none of them carry review data.
+  const [rating, setRating] = useState<ConsultantRating | null>(null);
+  useEffect(() => {
+    const userId = creator?.user_id;
+    if (!userId) return;
+    let cancelled = false;
+    fetchConsultantRatings([userId]).then(map => {
+      if (!cancelled) setRating(map[userId] ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [creator?.user_id]);
   const currentRole = useAuthStore((s) => s.currentRole);
 
   const name = creator?.name || 'Creator';
@@ -134,6 +149,11 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
               <View style={styles.headerText}>
                 <Text style={styles.name} numberOfLines={1}>{name}</Text>
                 <Text style={styles.subtitle} numberOfLines={1}>{subtitle || 'Creative Consultant'}</Text>
+                {/* Score sits directly under the name: this is the screen the
+                    client decides to hire from, so it has to be visible here. */}
+                <View style={styles.ratingRow}>
+                  <RatingStars average={rating?.average_rating} count={rating?.review_count} size="md" />
+                </View>
                 {experience ? (
                   <View style={styles.expPill}>
                     <Award size={13} color={colors.primary} />
@@ -339,6 +359,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginBottom: 2,
   },
+  ratingRow: { marginTop: 6 },
   subtitle: {
     fontSize: fontSizes.sm,
     fontFamily: fonts.body,

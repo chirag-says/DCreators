@@ -17,8 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Edit3, Trash2, Plus, Briefcase } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
-import ConsultantDashboard from '../components/dashboard/ConsultantDashboard';
 import TopHeader from '../components/TopHeader';
+import { getAssignmentTitle } from '../lib/assignment';
 import { fetchConsultantProducts, deleteShopProduct } from '../services/shopService';
 import { fetchConsultantDashboardProjects } from '../services/projectService';
 
@@ -26,6 +26,33 @@ const NAVY   = '#1B3A5C';
 const ORANGE = '#E87B35';
 const TEAL   = '#3D9B8F';
 const BG     = '#EDF1F5';
+
+/** Portfolio/listing cap. Mirrors MAX_SLOTS in ConsultantPortfolioUpdateScreen. */
+const MAX_LISTINGS = 5;
+
+/**
+ * Badge text per project status. "assigned" reads ACTIVE because the section
+ * is already called Active Project Assignments — the client asked for the
+ * badge to say the project is live, not to restate the section heading.
+ */
+const STATUS_LABELS: Record<string, string> = {
+  assigned: 'ACTIVE',
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  assigned: '#E87B35', advance_pending: '#F59E0B', in_progress: '#0D7F7A',
+  review_1: '#6366F1', review_2: '#8B5CF6', final_review: '#EC4899',
+  work_order_generated: '#3B82F6', work_order_accepted: '#10B981',
+  advance_paid: '#14B8A6',
+};
+
+/** "12 Mar 2026", or a dash when the date is not set. */
+function formatDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
 export default function CreatorDashboardScreen({ navigation }: any) {
   const consultantProfile = useAuthStore(s => s.consultantProfile);
@@ -90,13 +117,23 @@ export default function CreatorDashboardScreen({ navigation }: any) {
     return '#059669';
   }
 
+  const firstName = (consultantProfile?.display_name || profile?.name || '').trim().split(/\s+/)[0];
+  const dashboardTitle = firstName ? `${firstName}'s Dashboard` : "Creator's Dashboard";
+
+  // How many artwork slots are left of the five. At zero the Add button goes
+  // grey and stops responding, so the cap is visible before it is hit.
+  const slotsLeft = Math.max(0, MAX_LISTINGS - products.length);
+  const canAddListing = slotsLeft > 0;
+
   // ── Shared header used by both tabs (Figma "Project Dashboard" look) ──
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
 
       {/* Header: same TopHeader used on the client side (hamburger + role switch + search/user) */}
       <TopHeader />
-      <Text style={s.dashTitle}>Creator's Dashboard</Text>
+      {/* Personalised: "Gautam's Dashboard". Falls back to the generic title
+          when the profile has no name yet (fresh signup, offline first load). */}
+      <Text style={s.dashTitle}>{dashboardTitle}</Text>
 
       {/* Sales Dashboard / Project Dashboard toggle pills */}
       <View style={s.toggleRow}>
@@ -128,12 +165,15 @@ export default function CreatorDashboardScreen({ navigation }: any) {
             <View style={s.listHeader}>
               <Text style={s.listTitle}>My Artwork Listings</Text>
               <TouchableOpacity
-                style={s.addBtn}
+                style={[s.addBtn, !canAddListing && s.addBtnDisabled]}
                 onPress={() => navigation.navigate('ConsultantPortfolioUpdate')}
+                disabled={!canAddListing}
                 activeOpacity={0.85}
               >
-                <Plus size={16} color="#fff" />
-                <Text style={s.addBtnText}>Add</Text>
+                <Plus size={16} color={canAddListing ? '#fff' : '#9CA3AF'} />
+                <Text style={[s.addBtnText, !canAddListing && s.addBtnTextDisabled]}>
+                  {canAddListing ? `${slotsLeft} Add` : 'All 5 added'}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -212,9 +252,10 @@ export default function CreatorDashboardScreen({ navigation }: any) {
               </View>
             )}
 
-            {/* Incoming purchase requests for the above listings */}
-            <View style={s.salesDivider} />
-            <ConsultantDashboard navigation={navigation} />
+            {/* Purchase Requests used to sit here. It moved to the SALES tab
+                (ConsultantEarningsHistoryScreen) so this dashboard shows only
+                what the creator owns, and every incoming sale lives in one
+                place alongside the sales history. */}
           </>
         ) : (
           <>
@@ -233,13 +274,11 @@ export default function CreatorDashboardScreen({ navigation }: any) {
               <View style={s.inboxSection}>
                 {projects.map((proj: any) => {
                   const clientName = (proj.profiles as any)?.name ?? 'Client';
-                  const STATUS_COLORS: Record<string, string> = {
-                    assigned: '#E87B35', advance_pending: '#F59E0B', in_progress: '#0D7F7A',
-                    review_1: '#6366F1', review_2: '#8B5CF6', final_review: '#EC4899',
-                    work_order_generated: '#3B82F6', work_order_accepted: '#10B981',
-                    advance_paid: '#14B8A6',
-                  };
                   const badgeColor = STATUS_COLORS[proj.status] ?? '#9CA3AF';
+                  const badgeLabel = STATUS_LABELS[proj.status] ?? proj.status.replace(/_/g, ' ').toUpperCase();
+                  // The live number: what was agreed if they have agreed, else
+                  // the client's opening budget.
+                  const price = Number(proj.final_offer ?? proj.budget ?? 0);
                   return (
                     <TouchableOpacity
                       key={proj.id}
@@ -247,15 +286,27 @@ export default function CreatorDashboardScreen({ navigation }: any) {
                       onPress={() => navigation.navigate('Main', { screen: 'CreatorWorkorder', params: { project: proj } })}
                       activeOpacity={0.85}
                     >
-                      <View style={{ flex: 1 }}>
+                      <View style={s.projectCardHead}>
                         <Text style={s.projectCardTitle} numberOfLines={1}>
-                          {proj.assignment_details?.[0] ?? proj.assignment_type ?? 'Creative Project'}
+                          {getAssignmentTitle(proj)}
                         </Text>
-                        <Text style={s.projectCardClient}>From: {clientName}</Text>
-                        {proj.budget && <Text style={s.projectCardBudget}>₹{Number(proj.budget).toLocaleString('en-IN')}</Text>}
+                        <View style={[s.statusBadge, { backgroundColor: badgeColor + '22' }]}>
+                          <Text style={[s.statusBadgeText, { color: badgeColor }]}>{badgeLabel}</Text>
+                        </View>
                       </View>
-                      <View style={[s.statusBadge, { backgroundColor: badgeColor + '22' }]}>
-                        <Text style={[s.statusBadgeText, { color: badgeColor }]}>{proj.status.replace(/_/g, ' ').toUpperCase()}</Text>
+
+                      <Text style={s.projectCardClient}>From: {clientName}</Text>
+                      <Text style={s.projectCardBudget}>₹{price.toLocaleString('en-IN')}</Text>
+
+                      <View style={s.projectMetaRow}>
+                        <View style={s.projectMetaCell}>
+                          <Text style={s.projectMetaLabel}>DEADLINE</Text>
+                          <Text style={s.projectMetaValue}>{formatDate(proj.deadline)}</Text>
+                        </View>
+                        <View style={s.projectMetaCell}>
+                          <Text style={s.projectMetaLabel}>ASSIGNED</Text>
+                          <Text style={s.projectMetaValue}>{formatDate(proj.created_at)}</Text>
+                        </View>
                       </View>
                     </TouchableOpacity>
                   );
@@ -279,14 +330,21 @@ export default function CreatorDashboardScreen({ navigation }: any) {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
 
-  inboxSection: { marginHorizontal: 20, marginBottom: 16, marginTop: 8 },
-  inboxTitle: { fontSize: 13, fontWeight: '700', fontFamily: fonts.heavy, color: NAVY, marginBottom: 10, letterSpacing: 0.3 },
-  projectCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E8EAF0', ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 }, android: { elevation: 2 } }) },
-  projectCardTitle: { fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy, color: NAVY },
+  // No marginHorizontal here: the ScrollView already pads 20, and the second
+  // 20 was indenting the cards past the "Active Project Assignments" heading.
+  inboxSection: { marginBottom: 16, marginTop: 8 },
+  projectCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#E8EAF0', ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 }, android: { elevation: 2 } }) },
+  projectCardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  projectCardTitle: { flex: 1, fontSize: fontSizes.base, fontWeight: '700', fontFamily: fonts.heavy, color: NAVY },
   projectCardClient: { fontSize: fontSizes.xs, fontFamily: fonts.body, color: colors.textSecondary, marginTop: 2 },
   projectCardBudget: { fontSize: fontSizes.sm, fontWeight: '700', fontFamily: fonts.heavy, color: ORANGE, marginTop: 4 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, alignSelf: 'flex-start', marginLeft: 8 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
   statusBadgeText: { fontSize: 9, fontWeight: '700', fontFamily: fonts.heavy, letterSpacing: 0.3 },
+
+  projectMetaRow: { flexDirection: 'row', gap: 20, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F1F3F7' },
+  projectMetaCell: { flex: 1 },
+  projectMetaLabel: { fontSize: 9, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textTertiary, letterSpacing: 0.6, marginBottom: 2 },
+  projectMetaValue: { fontSize: fontSizes.xs + 1, fontWeight: '700', fontFamily: fonts.heavy, color: NAVY },
 
   dashTitle: { fontSize: 28, fontWeight: '900', fontFamily: fonts.heavy, color: NAVY, lineHeight: 34, textAlign: 'center', marginTop: 6, marginBottom: 2 },
 
@@ -322,8 +380,6 @@ const s = StyleSheet.create({
     fontWeight: '800',
   },
 
-  salesDivider: { height: 1, backgroundColor: 'rgba(0,0,0,0.08)', marginVertical: 24 },
-
   scroll: { paddingHorizontal: 20, paddingBottom: 40 },
 
   listHeader: {
@@ -336,6 +392,8 @@ const s = StyleSheet.create({
     backgroundColor: NAVY, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8,
   },
   addBtnText: { color: '#fff', fontSize: fontSizes.sm, fontWeight: '700', fontFamily: fonts.heavy },
+  addBtnDisabled: { backgroundColor: '#E5E7EB' },
+  addBtnTextDisabled: { color: '#9CA3AF' },
 
   productList: { gap: 16 },
   productCard: {

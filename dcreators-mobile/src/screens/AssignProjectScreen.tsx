@@ -32,6 +32,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { createProject } from '../services/projectService';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
+import { HIRE_ROLES, CREATIVE_ITEMS } from '../lib/assignment';
 
 // ─── Figma design tokens ──────────────────────────────────────
 const NAVY = '#1B3A5C';
@@ -41,32 +42,8 @@ const ORANGE_LIGHT = '#FFF5ED';
 const BG = '#F5F6FA';
 
 // ─── Creative Items per Figma CONSULTANT_SERVICE_PRICING_SCREEN ─
-const HIRE_ROLES = [
-  'Hire Creative Consultant',
-  'Hire Photographer',
-  'Hire Videographer',
-  'Hire Designer',
-  'Hire Sculptor',
-  'Hire Artisan',
-];
-
-const CREATIVE_ITEMS = [
-  'Academic Event Photography',
-  'Accessories & Jewelleries',
-  'App Design',
-  'Architectural Photography',
-  'Birthday Photography',
-  'Brand Identity',
-  'Logo Design',
-  'Social Media Kit',
-  'Packaging Design',
-  'Illustration',
-  'UI/UX Design',
-  'Product Photography',
-  'Corporate Photography',
-  'Art Direction',
-  'Video Production',
-];
+// Moved to src/lib/assignment.ts so the bid and booking flows ask for the same
+// vocabulary instead of each inventing its own.
 
 export default function AssignProjectScreen({ navigation, route }: any) {
   // Direct hire path passes a consultant; bidding path does not
@@ -78,8 +55,8 @@ export default function AssignProjectScreen({ navigation, route }: any) {
   const [agreedTerms, setAgreedTerms] = useState(false);
 
   // Form state — pre-populate budget from consultant base price on direct hire
-  const [hireRole, setHireRole] = useState(HIRE_ROLES[0]);
-  const [creativeItem, setCreativeItem] = useState(CREATIVE_ITEMS[6]); // default: Logo Design
+  const [hireRole, setHireRole] = useState<string>(HIRE_ROLES[0]);
+  const [creativeItem, setCreativeItem] = useState<string>(CREATIVE_ITEMS[6]); // default: Logo Design
   const [deadline, setDeadline] = useState('');
   const [budget, setBudget] = useState(
     consultant?.base_price ? String(consultant.base_price) : '',

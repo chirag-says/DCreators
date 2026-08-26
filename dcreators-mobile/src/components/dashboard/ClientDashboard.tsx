@@ -105,6 +105,26 @@ export default function ClientDashboard({ navigation }: ClientDashboardProps) {
             </View>
             <Text style={styles.exploreSubtitle}>Explore Creative Consultant's Portfolio</Text>
 
+            {/* Entry point to the bidding flow. It existed end to end in the
+                services but was reachable from exactly one button buried on
+                the Activity screen, so nobody found it. */}
+            <TouchableOpacity
+              style={styles.bidCta}
+              onPress={() => navigation.navigate('CreateBid')}
+              activeOpacity={0.88}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.bidCtaTitle}>Have a budget in mind?</Text>
+                <Text style={styles.bidCtaSub}>
+                  Name your price and we'll line up consultants who fit it. Rank them,
+                  and we'll ask your first choice first.
+                </Text>
+              </View>
+              <View style={styles.bidCtaArrow}>
+                <ChevronRight size={18} color="#fff" />
+              </View>
+            </TouchableOpacity>
+
             {/* Error Banner */}
             {creatorsError && (
               <View style={styles.errorBanner}>
@@ -228,6 +248,39 @@ const styles = StyleSheet.create({
     fontFamily: fonts.heavy,
     color: NAVY,
     textAlign: 'center',
+  },
+
+  // ── Bidding CTA ───────────────────────────────
+  bidCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: NAVY,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.lg,
+  },
+  bidCtaTitle: {
+    fontSize: fontSizes.base,
+    fontWeight: '800',
+    fontFamily: fonts.heavy,
+    color: '#fff',
+  },
+  bidCtaSub: {
+    fontSize: fontSizes.xs + 1,
+    fontFamily: fonts.body,
+    color: 'rgba(255,255,255,0.82)',
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  bidCtaArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // ── Error ─────────────────────────────────────

@@ -22,6 +22,9 @@ import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import MonthCalendar from '../components/MonthCalendar';
 import { fetchConsultantTakenDates } from '../services/consultantScheduleService';
 import { createProject } from '../services/projectService';
+import { CREATIVE_ITEMS } from '../lib/assignment';
+import RatingStars from '../components/RatingStars';
+import { fetchConsultantRatings, type ConsultantRating } from '../services/consultantService';
 
 const NAVY = '#1B3A5C';
 const TEAL = '#3D9B8F';
@@ -42,13 +45,28 @@ export default function BookConsultantScreen({ navigation, route }: any) {
   const [takenDates, setTakenDates] = useState<Set<string>>(new Set());
   const [loadingDates, setLoadingDates] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // Concrete deliverable — becomes assignment_details[0], i.e. the title the
+  // consultant sees. Without it a booked project degrades to "Hire Designer".
+  const [creativeItem, setCreativeItem] = useState<string | null>(null);
   const [brief, setBrief] = useState('');
   const [budget, setBudget] = useState(consultant?.base_price ? String(consultant.base_price) : '');
   const [submitting, setSubmitting] = useState(false);
 
   const categoryLabel = CATEGORY_LABELS[consultant?.category] ?? 'Creative Consultant';
 
+  const [rating, setRating] = useState<ConsultantRating | null>(null);
+
   useEffect(() => { fetchTakenDates(); }, [consultant?.user_id]);
+
+  useEffect(() => {
+    const userId = consultant?.user_id;
+    if (!userId) return;
+    let cancelled = false;
+    fetchConsultantRatings([userId]).then(map => {
+      if (!cancelled) setRating(map[userId] ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [consultant?.user_id]);
 
   async function fetchTakenDates() {
     if (!consultant?.user_id) { setLoadingDates(false); return; }
@@ -65,7 +83,7 @@ export default function BookConsultantScreen({ navigation, route }: any) {
   }
 
   const budgetNum = Number(budget.replace(/[^0-9.]/g, '')) || 0;
-  const canSubmit = !!selectedDate && brief.trim().length > 10 && budgetNum > 0;
+  const canSubmit = !!selectedDate && !!creativeItem && brief.trim().length > 10 && budgetNum > 0;
 
   async function handleSubmit() {
     if (!profile?.id || !consultant?.user_id) return;
@@ -80,7 +98,7 @@ export default function BookConsultantScreen({ navigation, route }: any) {
         client_id: profile.id,
         consultant_id: consultant.user_id,
         assignment_type: `Hire ${categoryLabel}`,
-        assignment_details: null,
+        assignment_details: creativeItem ? [creativeItem] : null,
         assignment_brief: brief.trim(),
         budget: budgetNum,
         event_date: selectedDate,
@@ -138,6 +156,11 @@ export default function BookConsultantScreen({ navigation, route }: any) {
           <View>
             <Text style={s.consultantName}>{consultant?.name}</Text>
             <Text style={s.consultantRole}>{categoryLabel}</Text>
+            {/* The commit point. A client about to enter a budget should see
+                what previous clients scored this consultant. */}
+            <View style={s.ratingRow}>
+              <RatingStars average={rating?.average_rating} count={rating?.review_count} />
+            </View>
           </View>
         </View>
 
@@ -151,6 +174,24 @@ export default function BookConsultantScreen({ navigation, route }: any) {
             onSelectDate={setSelectedDate}
           />
         )}
+
+        <Text style={[s.sectionLabel, { marginTop: 20 }]}>WHAT DO YOU NEED MADE?</Text>
+        <View style={s.chipWrap}>
+          {CREATIVE_ITEMS.map(item => {
+            const active = creativeItem === item;
+            return (
+              <TouchableOpacity
+                key={item}
+                style={[s.chip, active && s.chipActive]}
+                onPress={() => setCreativeItem(item)}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.chipText, active && s.chipTextActive]}>{item}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={s.chipHint}>This becomes the assignment title your consultant sees.</Text>
 
         <Text style={[s.sectionLabel, { marginTop: 20 }]}>ASSIGNMENT BRIEF</Text>
         <TextInput
@@ -207,9 +248,19 @@ const s = StyleSheet.create({
   avatarFallback: { backgroundColor: TEAL, alignItems: 'center', justifyContent: 'center' },
   avatarInit: { color: '#fff', fontSize: 18, fontWeight: '800', fontFamily: fonts.heavy },
   consultantName: { fontSize: fontSizes.lg, fontWeight: '800', fontFamily: fonts.heavy, color: NAVY },
+  ratingRow: { marginTop: 5 },
   consultantRole: { fontSize: fontSizes.sm, fontFamily: fonts.body, color: colors.textSecondary, marginTop: 2 },
 
   sectionLabel: { fontSize: 10, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textTertiary, letterSpacing: 0.8, marginBottom: 10 },
+
+  // Same chip vocabulary as CreateBidScreen — one visual language for
+  // "pick a creative item" wherever the client is asked for one.
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: radii.full, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.borderInput },
+  chipActive: { backgroundColor: NAVY, borderColor: NAVY },
+  chipText: { fontSize: fontSizes.sm + 1, fontFamily: fonts.medium, color: colors.textSecondary },
+  chipTextActive: { color: '#fff', fontWeight: '700', fontFamily: fonts.heavy },
+  chipHint: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textTertiary, marginTop: 8 },
   textarea: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: colors.borderInput, paddingHorizontal: 16, paddingVertical: 14, fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textPrimary, minHeight: 110 },
   input: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: colors.borderInput, paddingHorizontal: 16, paddingVertical: 14, fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textPrimary },
 

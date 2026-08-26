@@ -45,6 +45,8 @@ const PRICE_BAND = 0.2; // ±20% of quoted budget, per spec
 export async function createBidRequest(input: {
   client_id: string;
   category: ConsultantCategory;
+  /** Concrete deliverable, e.g. "Logo Design". Becomes the assignment title. */
+  creative_item: string;
   assignment_brief: string;
   event_date: string | null;
   budget: number;
@@ -252,7 +254,10 @@ export async function acceptBidCandidate(bidCandidateId: string): Promise<Projec
       client_id: bidRequest.client_id,
       consultant_id: consultantProfile.user_id,
       assignment_type: `Hire ${categoryLabel}`,
-      assignment_details: null,
+      // Carry the client's creative item through as the assignment title.
+      // Older bid rows predate the column and stay null; getAssignmentTitle()
+      // degrades to the brief for those.
+      assignment_details: bidRequest.creative_item ? [bidRequest.creative_item] : null,
       assignment_brief: bidRequest.assignment_brief,
       budget: candidate.quoted_price,
       event_date: bidRequest.event_date,

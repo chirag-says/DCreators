@@ -113,6 +113,8 @@ export interface BidRequest {
   id: string;
   client_id: string;
   category: ConsultantCategory;
+  /** Concrete deliverable ("Logo Design"). Null on rows created before the column existed. */
+  creative_item: string | null;
   assignment_brief: string;
   event_date: string | null;
   budget: number;

@@ -6,6 +6,47 @@
 import { supabase } from '../lib/supabase';
 import type { ConsultantProfile } from '../types';
 
+export interface ConsultantRating {
+  average_rating: number;
+  review_count: number;
+}
+
+/**
+ * Average rating + review count for a set of consultants, keyed by user_id.
+ *
+ * Batched on purpose: a client browsing a list would otherwise fire one query
+ * per card. Consultants with no reviews are simply absent from the map, which
+ * callers render as "New" rather than a misleading 0.0.
+ *
+ * Reads the `consultant_ratings` view (20260826120300). Never throws — a
+ * missing rating must not take down a profile or a booking screen.
+ */
+export async function fetchConsultantRatings(
+  consultantUserIds: string[],
+): Promise<Record<string, ConsultantRating>> {
+  const ids = Array.from(new Set(consultantUserIds.filter(Boolean)));
+  if (ids.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('consultant_ratings')
+    .select('consultant_user_id, average_rating, review_count')
+    .in('consultant_user_id', ids);
+
+  if (error) {
+    console.error('[ConsultantService] fetchConsultantRatings error:', error.message);
+    return {};
+  }
+
+  const map: Record<string, ConsultantRating> = {};
+  for (const row of data ?? []) {
+    map[(row as any).consultant_user_id] = {
+      average_rating: Number((row as any).average_rating) || 0,
+      review_count: Number((row as any).review_count) || 0,
+    };
+  }
+  return map;
+}
+
 /**
  * Fetch all active consultant profiles for the dashboard.
  * Returns typed ConsultantProfile array, never throws.

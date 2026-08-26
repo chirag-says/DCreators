@@ -34,6 +34,7 @@ import { updateProjectStatus } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
+import { getAssignmentTitle } from '../lib/assignment';
 import FigmaBottomBar from '../components/FigmaBottomBar';
 
 const NAVY = '#1B3A5C';
@@ -89,7 +90,7 @@ export default function ConsultantWorkOrderScreen({ navigation, route }: any) {
 
   const clientName = project?.client_name ?? 'Client';
   const designerName = project?.consultant_profiles?.display_name ?? 'Designer';
-  const projectTitle = project?.assignment_details?.[0] ?? project?.assignment_type ?? 'Creative Project';
+  const projectTitle = getAssignmentTitle(project);
   const overview = project?.assignment_brief ??
     'The objective is to develop a comprehensive brand identity system for the startup. The visual language must modernize the brand while maintaining long-term credibility.';
 

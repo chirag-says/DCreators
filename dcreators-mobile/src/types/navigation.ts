@@ -61,6 +61,10 @@ export type RootStackParamList = {
   ConsultantWorkOrder: { project: Project };
   // owner_role: CLIENT  previous: PaymentScreen (balance_paid)  next: Main/Dashboard
   RateConsultant: { project: Project };
+  // owner_role: CONSULTANT  previous: CreatorWorkorder (price accepted)  next: AssignmentPayment | Chat | Main/Dashboard
+  AssignmentAccepted: { project: Project; agreedAmount: number };
+  // owner_role: CONSULTANT  previous: AssignmentAccepted | CreatorWorkorder (advance_pending)
+  AssignmentPayment: { project: Project; agreedAmount?: number };
 
   // Phase 4 — Product B: Artwork Marketplace
   // owner_role: ARTIST  previous: notification (purchase_request)

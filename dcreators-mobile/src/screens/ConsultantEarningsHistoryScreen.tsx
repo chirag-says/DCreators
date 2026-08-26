@@ -19,6 +19,8 @@ import { useAuthStore } from '../store/useAuthStore';
 import { fetchCompletedArtworkSales } from '../services/artworkService';
 import { fetchCompletedProjectsForEarnings, fetchRecentReviewsWithReviewer } from '../services/projectService';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { getAssignmentTitle } from '../lib/assignment';
+import ConsultantDashboard from '../components/dashboard/ConsultantDashboard';
 
 const NAVY   = '#1B3A5C';
 const ORANGE = '#E87B35';
@@ -84,8 +86,15 @@ export default function ConsultantEarningsHistoryScreen({ navigation }: any) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={TEAL} />}
       >
         {/* ── Hero ── */}
-        <Text style={s.heroTitle}>Sales History</Text>
-        <Text style={s.heroSub}>Track your artistic legacy and consultant milestones across the Dcreators ecosystem.</Text>
+        <Text style={s.heroTitle}>Sales</Text>
+        <Text style={s.heroSub}>Answer incoming artwork requests, then track your artistic legacy and consultant milestones across the Dcreators ecosystem.</Text>
+
+        {/* ── Incoming purchase requests ──
+            Moved here from the Creator's Dashboard sales tab. Requests need an
+            answer, so they sit above the history rather than under it. */}
+        <View style={s.pendingBlock}>
+          <ConsultantDashboard navigation={navigation} />
+        </View>
 
         {/* ── Tab toggle ── */}
         <View style={s.tabBar}>
@@ -168,7 +177,7 @@ export default function ConsultantEarningsHistoryScreen({ navigation }: any) {
                     <View key={p.id} style={s.saleCard}>
                       <View style={s.saleIconCircle}><Briefcase size={18} color={TEAL} /></View>
                       <View style={{ flex: 1 }}>
-                        <Text style={s.saleTitle} numberOfLines={2}>{p.assignment_brief}</Text>
+                        <Text style={s.saleTitle} numberOfLines={2}>{getAssignmentTitle(p)}</Text>
                         <Text style={s.saleDate}>Client: {p.client?.name ?? '—'}</Text>
                         <Text style={s.saleDate}>Completed {formatDate(p.updated_at)}</Text>
                       </View>
@@ -240,6 +249,7 @@ const s = StyleSheet.create({
   scroll: { paddingHorizontal: 20, paddingBottom: 40 },
   heroTitle: { fontSize: 40, fontWeight: '900', fontFamily: fonts.heavy, color: NAVY, marginTop: 14, marginBottom: 10, lineHeight: 44 },
   heroSub: { fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 22, marginBottom: 20 },
+  pendingBlock: { marginBottom: 24, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.08)' },
   // Tab
   tabBar: { flexDirection: 'row', backgroundColor: '#E5E7EB', borderRadius: 12, padding: 4, marginBottom: 24 },
   tabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },

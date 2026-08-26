@@ -16,6 +16,7 @@ import { createCashfreeOrder, verifyPaymentStatus } from '../lib/cashfree';
 import { sendNotification } from '../lib/notifications';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { getAssignmentTitle } from '../lib/assignment';
 
 
 export default function PaymentScreen({ navigation, route }: any) {
@@ -300,7 +301,7 @@ export default function PaymentScreen({ navigation, route }: any) {
                   <View style={styles.costRow}>
                     <Text style={styles.costLabel}>Project</Text>
                     <Text style={[styles.costValue, { maxWidth: '60%' }]} numberOfLines={1}>
-                      {project?.assignment_details?.[0] || project?.assignment_type || 'Creative Service'}
+                      {getAssignmentTitle(project)}
                     </Text>
                   </View>
                   <View style={styles.costRow}>
