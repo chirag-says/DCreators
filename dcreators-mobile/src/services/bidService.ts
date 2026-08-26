@@ -51,11 +51,28 @@ export async function createBidRequest(input: {
   event_date: string | null;
   budget: number;
 }): Promise<BidRequest> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('bid_requests')
     .insert(input)
     .select()
     .single();
+
+  // Tolerate a database that has not taken 20260826120100 yet. A client should
+  // not be unable to post a bid because a migration is lagging behind a build;
+  // they lose the pre-set title, and getAssignmentTitle() falls back to the
+  // brief, which is strictly better than a dead submit button.
+  if (error && error.message.includes('creative_item')) {
+    console.warn(
+      '[BidService] bid_requests.creative_item is missing — apply migration ' +
+      '20260826120100_add_bid_creative_item. Posting without the title for now.',
+    );
+    const { creative_item: _omitted, ...withoutItem } = input;
+    ({ data, error } = await supabase
+      .from('bid_requests')
+      .insert(withoutItem)
+      .select()
+      .single());
+  }
 
   if (error) {
     console.error('[BidService] createBidRequest error:', error.message);
