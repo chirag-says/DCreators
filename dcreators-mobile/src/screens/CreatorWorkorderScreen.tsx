@@ -1,5 +1,8 @@
 // CreatorWorkorderScreen — Consultant Project Dashboard (consolidated)
-// CONSULTANT-only. Renders the correct state based on project status:
+// owner_role: CONSULTANT
+// CONSULTANT-only. The client's view of the same project is ClientWorkorder;
+// that one carries the payment actions, this one carries the work.
+// Renders the correct state based on project status:
 //   NEGOTIATION (assigned/advance_pending) → Submit Offer
 //   COLLABORATION (in_progress + collab tab) → Search & invite consultant
 //   REVIEW-UPLOAD (in_progress/review_1/review_2/final_review) → Upload designs

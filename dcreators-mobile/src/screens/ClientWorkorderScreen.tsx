@@ -1,5 +1,11 @@
 // ============================================================
 // ClientWorkorderScreen — Project Flow Timeline (Figma Match)
+// owner_role: CLIENT
+// ============================================================
+// CLIENT ONLY. This screen spends money — Pay Advance, Pay Balance, Approve
+// Work Order. The consultant's view of the same project is CreatorWorkorder.
+// Routing a consultant here asks them to pay themselves; a guard in the
+// component redirects them, but don't rely on it, link to the right screen.
 // ============================================================
 // Matches: "Project Flow - Final.png" & "Open Source Project Flow -.png"
 //
@@ -18,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import TopHeader from '../components/TopHeader';
 import { updateProjectStatus, fetchProjectSubmissions, proposeProjectPrice, acceptProjectPrice, closeNegotiation } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
+import { useAuthStore } from '../store/useAuthStore';
 import PriceNegotiationCard from '../components/PriceNegotiationCard';
 import {
   FileText, ImageIcon, ChevronRight, Info,
@@ -49,8 +56,22 @@ const ROUND_META: Record<string, { label: string; uploadLabel: string; feedbackL
 
 export default function ClientWorkorderScreen({ navigation, route }: any) {
   const project = route?.params?.project;
+  const currentRole = useAuthStore(s => s.currentRole);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Whole-screen role guard. This is the CLIENT's view of a project: it offers
+  // Pay Advance, Pay Balance and Approve Work Order. A consultant who lands
+  // here — through the back stack, a stale route, or a miswired button — is
+  // being asked to pay themselves for their own work. Redirect to their own
+  // surface rather than trying to hide each money action individually, which
+  // is the kind of thing that gets missed the next time a block is added.
+  useEffect(() => {
+    if (currentRole === 'consultant' && project?.id) {
+      navigation.replace('Main', { screen: 'CreatorWorkorder', params: { project } });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRole, project?.id]);
 
   const projectCode = project
     ? `D/${new Date(project.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '/')}`

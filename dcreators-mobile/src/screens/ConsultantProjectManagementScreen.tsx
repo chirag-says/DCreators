@@ -178,7 +178,11 @@ export default function ConsultantProjectManagementScreen({ navigation }: any) {
             <TouchableOpacity
               key={p.id}
               style={s.projectCard}
-              onPress={() => navigation.navigate('ClientWorkorder', { project: p })}
+              // CreatorWorkorder, not ClientWorkorder. This sent the consultant
+              // to the client's view of their own project, which offers Pay
+              // Advance and Pay Balance — asking the person doing the work to
+              // pay themselves. Matches how the home dashboard opens a project.
+              onPress={() => navigation.navigate('Main', { screen: 'CreatorWorkorder', params: { project: p } })}
               activeOpacity={0.9}
             >
               <View style={s.projectTopRow}>
