@@ -32,7 +32,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { createProject } from '../services/projectService';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
-import { HIRE_ROLES, CREATIVE_ITEMS } from '../lib/assignment';
+import { HIRE_ROLES, creativeItemsFor, categoryForRole } from '../lib/assignment';
 
 // ─── Figma design tokens ──────────────────────────────────────
 const NAVY = '#1B3A5C';
@@ -56,7 +56,13 @@ export default function AssignProjectScreen({ navigation, route }: any) {
 
   // Form state — pre-populate budget from consultant base price on direct hire
   const [hireRole, setHireRole] = useState<string>(HIRE_ROLES[0]);
-  const [creativeItem, setCreativeItem] = useState<string>(CREATIVE_ITEMS[6]); // default: Logo Design
+  // Creative items are per-discipline, so the list follows the hire role and
+  // the selection resets with it. Defaults to the first item of the starting
+  // role rather than a hardcoded index into a flat list.
+  const itemsForRole = useMemo(() => creativeItemsFor(categoryForRole(hireRole)), [hireRole]);
+  const [creativeItem, setCreativeItem] = useState<string>(
+    () => creativeItemsFor(categoryForRole(HIRE_ROLES[0]))[0] ?? '',
+  );
   const [deadline, setDeadline] = useState('');
   const [budget, setBudget] = useState(
     consultant?.base_price ? String(consultant.base_price) : '',
@@ -181,7 +187,7 @@ export default function AssignProjectScreen({ navigation, route }: any) {
 
   function handleReset() {
     setHireRole(HIRE_ROLES[0]);
-    setCreativeItem(CREATIVE_ITEMS[6]);
+    setCreativeItem(creativeItemsFor(categoryForRole(HIRE_ROLES[0]))[0] ?? '');
     setDeadline('');
     setBudget('');
     setBrief('');
@@ -269,7 +275,12 @@ export default function AssignProjectScreen({ navigation, route }: any) {
                     <TouchableOpacity
                       key={r}
                       style={styles.dropdownItem}
-                      onPress={() => { setHireRole(r); setShowRoleDropdown(false); }}
+                      onPress={() => {
+                        setHireRole(r);
+                        // Snap the deliverable to the new discipline's catalogue.
+                        setCreativeItem(creativeItemsFor(categoryForRole(r))[0] ?? '');
+                        setShowRoleDropdown(false);
+                      }}
                     >
                       <Text style={[
                         styles.dropdownItemText,
@@ -299,7 +310,7 @@ export default function AssignProjectScreen({ navigation, route }: any) {
               </TouchableOpacity>
               {showItemDropdown && (
                 <View style={styles.dropdownList}>
-                  {CREATIVE_ITEMS.map((item) => (
+                  {itemsForRole.map((item) => (
                     <TouchableOpacity
                       key={item}
                       style={styles.dropdownItem}

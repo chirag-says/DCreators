@@ -18,6 +18,7 @@ import { ArrowLeft, ShieldCheck, ChevronDown, Send, Save, Edit3, Bell } from 'lu
 import { useAuthStore } from '../store/useAuthStore';
 import { fetchConsultantServicePricing, upsertConsultantServicePricing, updateConsultantProfile } from '../services/consultantService';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
+import { creativeItemsFor } from '../lib/assignment';
 
 const NAVY = '#1B3A5C';
 const TEAL = '#3D9B8F';
@@ -27,64 +28,10 @@ const BG = '#EDF1F5';
 type Category = 'Designer' | 'Photographer' | 'Videographer' | 'Sculptor' | 'Artisan';
 const CATEGORIES: Category[] = ['Designer', 'Photographer', 'Videographer', 'Sculptor', 'Artisan'];
 
-const SERVICE_ITEMS: Record<Category, string[]> = {
-  Designer: [
-    'Academic event photography',
-    'Accessories & Jewelleries (terracotta)',
-    'App design',
-    'Architectural Photography',
-    'Birthday photography',
-    'Brand identity design',
-    'Brochure design',
-    'Logo design',
-    'Poster design',
-    'Social media design',
-    'UI/UX design',
-    'Website design',
-  ],
-  Photographer: [
-    'Academic event photography',
-    'Architectural Photography',
-    'Birthday photography',
-    'Corporate photography',
-    'Fashion photography',
-    'Food photography',
-    'Product photography',
-    'Wedding photography',
-    'Wildlife photography',
-  ],
-  Videographer: [
-    'Corporate video',
-    'Drone coverage',
-    'Event coverage',
-    'Music video',
-    'Same-day edit',
-    'Social media reel',
-    'Wedding film',
-  ],
-  Sculptor: [
-    'Abstract sculpture',
-    'Bronze casting',
-    'Clay modelling',
-    'Installation art',
-    'Metal sculpture',
-    'Stone carving',
-    'Terracotta work',
-    'Wood carving',
-  ],
-  Artisan: [
-    'Accessories & Jewelleries (terracotta)',
-    'Ceramic work',
-    'Fabric printing',
-    'Hand embroidery',
-    'Leather craft',
-    'Macramé',
-    'Paper craft',
-    'Pottery',
-    'Weaving',
-    'Wooden craft',
-  ],
-};
+// The catalogue moved to lib/assignment so the client-facing bid, book, hire
+// and assign screens offer exactly what consultants can price here. Editing an
+// item's wording orphans the consultant_service_pricing rows keyed to the old
+// string, so change it in one place or not at all.
 
 const CATEGORY_DB_VALUE: Record<Category, string> = {
   Designer: 'designer',
@@ -116,7 +63,7 @@ export default function ConsultantServicePricingScreen({ navigation, route }: an
   const [saving,     setSaving]     = useState(false);
   const [mode,       setMode]       = useState<'view' | 'edit'>('edit');
 
-  const services = SERVICE_ITEMS[category];
+  const services = creativeItemsFor(CATEGORY_DB_VALUE[category]);
 
   // Resume with the consultant's already-chosen category, if any.
   useEffect(() => {

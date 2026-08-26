@@ -22,7 +22,7 @@ import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import MonthCalendar from '../components/MonthCalendar';
 import { fetchConsultantTakenDates } from '../services/consultantScheduleService';
 import { createProject } from '../services/projectService';
-import { CREATIVE_ITEMS } from '../lib/assignment';
+import { creativeItemsFor } from '../lib/assignment';
 import RatingStars from '../components/RatingStars';
 import { fetchConsultantRatings, type ConsultantRating } from '../services/consultantService';
 
@@ -83,7 +83,15 @@ export default function BookConsultantScreen({ navigation, route }: any) {
   }
 
   const budgetNum = Number(budget.replace(/[^0-9.]/g, '')) || 0;
-  const canSubmit = !!selectedDate && !!creativeItem && brief.trim().length > 10 && budgetNum > 0;
+  const creativeItems = creativeItemsFor(consultant?.category);
+  // Don't hold a booking hostage to a picker that has nothing in it: a
+  // consultant with no category set still needs to be bookable, and the brief
+  // carries the intent in that case.
+  const canSubmit =
+    !!selectedDate &&
+    (creativeItems.length === 0 || !!creativeItem) &&
+    brief.trim().length > 10 &&
+    budgetNum > 0;
 
   async function handleSubmit() {
     if (!profile?.id || !consultant?.user_id) return;
@@ -175,23 +183,36 @@ export default function BookConsultantScreen({ navigation, route }: any) {
           />
         )}
 
-        <Text style={[s.sectionLabel, { marginTop: 20 }]}>WHAT DO YOU NEED MADE?</Text>
-        <View style={s.chipWrap}>
-          {CREATIVE_ITEMS.map(item => {
-            const active = creativeItem === item;
-            return (
-              <TouchableOpacity
-                key={item}
-                style={[s.chip, active && s.chipActive]}
-                onPress={() => setCreativeItem(item)}
-                activeOpacity={0.8}
-              >
-                <Text style={[s.chipText, active && s.chipTextActive]}>{item}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <Text style={s.chipHint}>This becomes the assignment title your consultant sees.</Text>
+        {/* Only what this consultant actually does. The discipline is already
+            settled by whose profile you opened, so there is no category step
+            here and no reason to offer the other four catalogues. */}
+        <Text style={[s.sectionLabel, { marginTop: 20 }]}>
+          WHAT DO YOU NEED {categoryLabel.toUpperCase()} FOR?
+        </Text>
+        {creativeItems.length === 0 ? (
+          <Text style={s.chipHint}>
+            This consultant has not set a discipline yet. Describe what you need in the brief below.
+          </Text>
+        ) : (
+          <>
+            <View style={s.chipWrap}>
+              {creativeItems.map(item => {
+                const active = creativeItem === item;
+                return (
+                  <TouchableOpacity
+                    key={item}
+                    style={[s.chip, active && s.chipActive]}
+                    onPress={() => setCreativeItem(item)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[s.chipText, active && s.chipTextActive]}>{item}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={s.chipHint}>This becomes the assignment title your consultant sees.</Text>
+          </>
+        )}
 
         <Text style={[s.sectionLabel, { marginTop: 20 }]}>ASSIGNMENT BRIEF</Text>
         <TextInput

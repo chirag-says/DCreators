@@ -16,7 +16,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, radii } from '../styles/theme';
 import MonthCalendar from '../components/MonthCalendar';
 import { createBidRequest } from '../services/bidService';
-import { CREATIVE_ITEMS } from '../lib/assignment';
+import { creativeItemsFor } from '../lib/assignment';
 import type { ConsultantCategory } from '../types';
 
 const NAVY = '#1B3A5C';
@@ -41,6 +41,17 @@ export default function CreateBidScreen({ navigation }: any) {
   const [eventDate, setEventDate] = useState<string | null>(null);
   const [budget, setBudget] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Step 2's options come from step 1. Changing the discipline clears the
+  // deliverable, otherwise a client could carry "Wedding film" over from
+  // Videographer into Photographer and submit a job nobody in that category
+  // has priced.
+  const itemsForCategory = creativeItemsFor(category);
+  function selectCategory(next: ConsultantCategory) {
+    if (next === category) return;
+    setCategory(next);
+    setCreativeItem(null);
+  }
 
   const budgetNum = Number(budget.replace(/[^0-9]/g, '')) || 0;
   const canSubmit = !!category && !!creativeItem && brief.trim().length > 10 && !!eventDate && budgetNum > 0;
@@ -85,7 +96,8 @@ export default function CreateBidScreen({ navigation }: any) {
           priced near your budget, so you can pick who to ask first.
         </Text>
 
-        <Text style={s.sectionLabel}>WHAT DO YOU NEED?</Text>
+        {/* ── Step 1: the discipline ─────────────────────────── */}
+        <Text style={s.stepLabel}>STEP 1 — WHAT DO YOU NEED?</Text>
         <View style={s.chipWrap}>
           {CATEGORIES.map(c => {
             const active = category === c.key;
@@ -93,7 +105,7 @@ export default function CreateBidScreen({ navigation }: any) {
               <TouchableOpacity
                 key={c.key}
                 style={[s.chip, active && s.chipActive]}
-                onPress={() => setCategory(c.key)}
+                onPress={() => selectCategory(c.key)}
                 activeOpacity={0.8}
               >
                 <Text style={[s.chipText, active && s.chipTextActive]}>{c.label}</Text>
@@ -102,56 +114,73 @@ export default function CreateBidScreen({ navigation }: any) {
           })}
         </View>
 
-        <Text style={[s.sectionLabel, { marginTop: 20 }]}>WHAT SHOULD WE CALL IT?</Text>
-        <View style={s.chipWrap}>
-          {CREATIVE_ITEMS.map(item => {
-            const active = creativeItem === item;
-            return (
-              <TouchableOpacity
-                key={item}
-                style={[s.chip, active && s.chipActive]}
-                onPress={() => setCreativeItem(item)}
-                activeOpacity={0.8}
-              >
-                <Text style={[s.chipText, active && s.chipTextActive]}>{item}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <Text style={s.hint}>This becomes the assignment title your consultant sees.</Text>
+        {/* ── Step 2: the deliverable, narrowed by step 1 ─────
+            Hidden until a category exists, because the catalogue is
+            per-discipline: offering a client "Wedding film" under Photographer
+            is how they end up commissioning something nobody prices. */}
+        {!category ? (
+          <Text style={s.awaitingHint}>Pick a discipline to see what you can commission.</Text>
+        ) : (
+          <>
+            <Text style={s.stepLabel}>STEP 2 — WHAT SHOULD WE CALL IT?</Text>
+            <View style={s.chipWrap}>
+              {itemsForCategory.map(item => {
+                const active = creativeItem === item;
+                return (
+                  <TouchableOpacity
+                    key={item}
+                    style={[s.chip, active && s.chipActive]}
+                    onPress={() => setCreativeItem(item)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[s.chipText, active && s.chipTextActive]}>{item}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={s.hint}>This becomes the assignment title your consultant sees.</Text>
+          </>
+        )}
 
-        <Text style={[s.sectionLabel, { marginTop: 20 }]}>ASSIGNMENT BRIEF</Text>
-        <TextInput
-          style={s.textarea}
-          placeholder="Describe the event, deliverables, and any specifics..."
-          placeholderTextColor={colors.textTertiary}
-          value={brief}
-          onChangeText={setBrief}
-          multiline
-          numberOfLines={5}
-          textAlignVertical="top"
-        />
+        {/* ── Step 3: the specifics ───────────────────────────── */}
+        {category && creativeItem && (
+          <>
+            <Text style={s.stepLabel}>STEP 3 — THE DETAILS</Text>
 
-        <Text style={[s.sectionLabel, { marginTop: 20 }]}>EVENT DATE</Text>
-        <MonthCalendar
-          takenDates={new Set()}
-          selectedDate={eventDate}
-          onSelectDate={setEventDate}
-        />
+            <Text style={s.sectionLabel}>ASSIGNMENT BRIEF</Text>
+            <TextInput
+              style={s.textarea}
+              placeholder="Describe the event, deliverables, and any specifics..."
+              placeholderTextColor={colors.textTertiary}
+              value={brief}
+              onChangeText={setBrief}
+              multiline
+              numberOfLines={5}
+              textAlignVertical="top"
+            />
 
-        <Text style={[s.sectionLabel, { marginTop: 20 }]}>YOUR BUDGET (₹)</Text>
-        <TextInput
-          style={s.input}
-          placeholder="e.g. 50000"
-          placeholderTextColor={colors.textTertiary}
-          value={budget}
-          onChangeText={v => setBudget(v.replace(/[^0-9]/g, ''))}
-          keyboardType="numeric"
-        />
-        <Text style={s.hint}>
-          We'll show consultants priced between ₹{budgetNum ? Math.floor(budgetNum * 0.8).toLocaleString('en-IN') : '—'} and
-          {' '}₹{budgetNum ? Math.ceil(budgetNum * 1.2).toLocaleString('en-IN') : '—'}.
-        </Text>
+            <Text style={[s.sectionLabel, { marginTop: 20 }]}>EVENT DATE</Text>
+            <MonthCalendar
+              takenDates={new Set()}
+              selectedDate={eventDate}
+              onSelectDate={setEventDate}
+            />
+
+            <Text style={[s.sectionLabel, { marginTop: 20 }]}>YOUR BUDGET (₹)</Text>
+            <TextInput
+              style={s.input}
+              placeholder="e.g. 50000"
+              placeholderTextColor={colors.textTertiary}
+              value={budget}
+              onChangeText={v => setBudget(v.replace(/[^0-9]/g, ''))}
+              keyboardType="numeric"
+            />
+            <Text style={s.hint}>
+              We'll show consultants priced between ₹{budgetNum ? Math.floor(budgetNum * 0.8).toLocaleString('en-IN') : '—'} and
+              {' '}₹{budgetNum ? Math.ceil(budgetNum * 1.2).toLocaleString('en-IN') : '—'}.
+            </Text>
+          </>
+        )}
 
         <TouchableOpacity
           style={[s.submitBtn, (!canSubmit || submitting) && { opacity: 0.6 }]}
@@ -179,6 +208,8 @@ const s = StyleSheet.create({
   heroSub: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 20, marginBottom: 20 },
 
   sectionLabel: { fontSize: 10, fontWeight: '700', fontFamily: fonts.heavy, color: colors.textTertiary, letterSpacing: 0.8, marginBottom: 10 },
+  stepLabel: { fontSize: 11, fontWeight: '800', fontFamily: fonts.heavy, color: NAVY, letterSpacing: 0.8, marginTop: 24, marginBottom: 10 },
+  awaitingHint: { fontSize: fontSizes.sm, fontFamily: fonts.body, color: colors.textTertiary, fontStyle: 'italic', marginTop: 24 },
 
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: radii.full, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.borderInput },

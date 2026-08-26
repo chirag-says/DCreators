@@ -21,20 +21,17 @@ import { useAuthStore } from '../store/useAuthStore';
 import { createProject } from '../services/projectService';
 import { colors, fonts, fontSizes, spacing } from '../styles/theme';
 import type { ConsultantProfile } from '../types';
+import { HIRE_ROLES, creativeItemsFor, categoryForRole } from '../lib/assignment';
 
 const NAVY   = '#1B3A5C';
 const ORANGE = '#E87B35';
 const TEAL   = '#3D9B8F';
 const BG     = '#F7F8FA';
 
-const HIRE_ROLES = ['Hire Creative Consultant', 'Hire Photographer', 'Hire Designer', 'Hire Artisan'];
-
-const CREATIVE_ITEMS: Record<string, string[]> = {
-  'Hire Creative Consultant': ['Logo Design', 'Brand Identity', 'App Design', 'Poster Design', 'Brochure Design', 'UI/UX Design', 'Social Media Design'],
-  'Hire Photographer':        ['Wedding Photography', 'Product Photography', 'Fashion Photography', 'Event Photography', 'Portrait Photography'],
-  'Hire Designer':            ['Logo Design', 'Brand Identity', 'Brochure Design', 'Poster Design', 'Website Design', 'UI/UX Design'],
-  'Hire Artisan':             ['Pottery', 'Terracotta Work', 'Weaving', 'Leather Craft', 'Wood Carving', 'Hand Embroidery'],
-};
+// Roles and their catalogues come from lib/assignment. This screen used to
+// carry its own four-role map with item names that matched neither the
+// consultant pricing list nor the bid flow, so a client could commission
+// "Event Photography" that no consultant had ever priced.
 
 interface Props {
   navigation: any;
@@ -45,9 +42,13 @@ export default function HireConsultantScreen({ navigation, route }: Props) {
   const consultant = route?.params?.consultant;
   const profile    = useAuthStore(s => s.profile);
 
-  const [role,       setRole]       = useState('Hire Creative Consultant');
+  const [role,       setRole]       = useState<string>(HIRE_ROLES[0]);
   const [showRole,   setShowRole]   = useState(false);
-  const [item,       setItem]       = useState('Logo Design');
+  // Derived, not hardcoded: a literal default silently stops matching the
+  // moment the catalogue's wording changes.
+  const [item,       setItem]       = useState<string>(
+    () => creativeItemsFor(categoryForRole(HIRE_ROLES[0]))[0] ?? '',
+  );
   const [showItem,   setShowItem]   = useState(false);
   const [date,       setDate]       = useState('');
   const [budget,     setBudget]     = useState('5,000.00');
@@ -64,7 +65,7 @@ export default function HireConsultantScreen({ navigation, route }: Props) {
     ? Math.ceil((new Date(date).getTime() - Date.now()) / 86400000)
     : 15;
 
-  const items = CREATIVE_ITEMS[role] ?? CREATIVE_ITEMS['Hire Creative Consultant'];
+  const items = creativeItemsFor(categoryForRole(role));
 
   async function handlePayAdvance() {
     if (!agreedTnC) {
@@ -137,7 +138,7 @@ export default function HireConsultantScreen({ navigation, route }: Props) {
         {showRole && (
           <View style={s.dropdownList}>
             {HIRE_ROLES.map(r => (
-              <TouchableOpacity key={r} style={[s.dropdownItem, r === role && s.dropdownItemActive]} onPress={() => { setRole(r); setItem(CREATIVE_ITEMS[r]?.[0] ?? ''); setShowRole(false); }} activeOpacity={0.8}>
+              <TouchableOpacity key={r} style={[s.dropdownItem, r === role && s.dropdownItemActive]} onPress={() => { setRole(r); setItem(creativeItemsFor(categoryForRole(r))[0] ?? ''); setShowRole(false); }} activeOpacity={0.8}>
                 <Text style={[s.dropdownItemText, r === role && s.dropdownItemTextActive]}>{r}</Text>
               </TouchableOpacity>
             ))}

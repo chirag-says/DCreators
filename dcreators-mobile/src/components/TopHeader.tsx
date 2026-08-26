@@ -62,6 +62,20 @@ export default function TopHeader() {
   function toggleRole(role: 'client' | 'consultant') {
     if (role === currentRole) return;
     setRole(role);
+
+    // Screens are role-owned. Flipping the switch used to change only the
+    // store, so a consultant-only screen (CreatorWorkorder, the portfolio
+    // editor, an assignment) stayed on screen under a header that now said
+    // Client — showing data the active role has no business seeing, with more
+    // of it still sitting in the back stack.
+    //
+    // Sending them to the Dashboard fixes both: the stack pops back to Main,
+    // and DashboardScreen renders the right home for whichever role is now
+    // active. getParent() resolves the root stack whether this header is
+    // mounted inside a tab screen or a stack screen; when it is already the
+    // root, getParent() is undefined and `navigation` is the stack itself.
+    const root = navigation.getParent?.() ?? navigation;
+    root.navigate('Main', { screen: 'Dashboard' });
   }
 
   const pillTranslateX = slideAnim.interpolate({
