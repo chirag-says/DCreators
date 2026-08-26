@@ -115,17 +115,6 @@ export default function CreatorDashboardScreen({ navigation }: any) {
     ]);
   }
 
-  function getAvailabilityLabel(p: any): string {
-    if (p.is_active === false) return 'Not for Sale';
-    return 'Available for Sale';
-  }
-
-  function getAvailabilityColor(p: any): string {
-    const label = getAvailabilityLabel(p);
-    if (label === 'Not for Sale') return '#DC2626';
-    return '#059669';
-  }
-
   const firstName = (consultantProfile?.display_name || profile?.name || '').trim().split(/\s+/)[0];
   const dashboardTitle = firstName ? `${firstName}'s Dashboard` : "Creator's Dashboard";
 
@@ -241,8 +230,6 @@ export default function CreatorDashboardScreen({ navigation }: any) {
               <View style={s.productList}>
                 {products.map(p => {
                   const coverUri = p.images?.[0] ?? null;
-                  const availLabel = getAvailabilityLabel(p);
-                  const availColor = getAvailabilityColor(p);
                   return (
                     <View key={p.id} style={s.productCard}>
                       {/* Full-width image (Figma) */}
@@ -251,17 +238,15 @@ export default function CreatorDashboardScreen({ navigation }: any) {
                         : <View style={[s.productImg, s.productImgPlaceholder]} />
                       }
 
-                      {/* Info */}
+                      {/* Info. No price and no sale status: showcase work is
+                          not merchandise, and showing "Available for Sale"
+                          here is what conflated the two in the first place. */}
                       <View style={s.productBody}>
-                        {/* Title + price row */}
                         <View style={s.productTitleRow}>
                           <Text style={s.productTitle} numberOfLines={1}>{p.title}</Text>
-                          <Text style={s.productPrice}>
-                            ₹{Number(p.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </Text>
                         </View>
 
-                        <Text style={s.productCategory}>{p.category ?? 'Artwork'}</Text>
+                        <Text style={s.productCategory}>{p.medium || p.category || 'Artwork'}</Text>
 
                         <TouchableOpacity>
                           <Text style={s.productBrief}>
@@ -269,15 +254,16 @@ export default function CreatorDashboardScreen({ navigation }: any) {
                           </Text>
                         </TouchableOpacity>
 
-                        {/* Size + availability + edit pencil row */}
+                        {/* Size + edit/delete. Editing goes to the showcase
+                            form, not the sale form — this piece is not a
+                            product and has no price to set. */}
                         <View style={s.productMetaRow}>
                           <View style={{ flex: 1 }}>
                             <Text style={s.productSize}>Size: {p.size ?? 'Open'}</Text>
-                            <Text style={[s.availLabel, { color: availColor }]}>{availLabel}</Text>
                           </View>
                           <TouchableOpacity
                             style={s.actionBtn}
-                            onPress={() => navigation.navigate('AddEditProduct', { product: p })}
+                            onPress={() => navigation.navigate('ConsultantPortfolioUpdate')}
                             activeOpacity={0.7}
                           >
                             <Edit3 size={16} color={NAVY} />
@@ -465,8 +451,6 @@ const s = StyleSheet.create({
   productTitle: { flex: 1, fontSize: fontSizes.lg, fontWeight: '800', fontFamily: fonts.heavy, color: NAVY },
   productBrief: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: TEAL },
   productSize: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textTertiary },
-  productPrice: { fontSize: fontSizes.lg, fontWeight: '800', fontFamily: fonts.heavy, color: NAVY },
-  availLabel: { fontSize: fontSizes.xs, fontWeight: '700', fontFamily: fonts.heavy, marginTop: 2 },
   productMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   actionBtn: {
     width: 32, height: 32, borderRadius: 8,

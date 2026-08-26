@@ -23,6 +23,9 @@ export async function fetchShopProducts(): Promise<ShopProductWithConsultant[]> 
     .from('shop_products')
     .select('*, consultant_profiles(user_id, display_name, code)')
     .eq('is_active', true)
+    // The shop sells things. Showcase pieces have no price and are not for
+    // sale, so they belong on the creator's profile, not on a buying surface.
+    .eq('kind', 'listing')
     .order('created_at', { ascending: false });
 
   if (error) {

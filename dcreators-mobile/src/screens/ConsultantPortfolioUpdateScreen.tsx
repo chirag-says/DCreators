@@ -12,7 +12,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Image, Alert, Switch, ActivityIndicator,
+  TextInput, Image, Alert, ActivityIndicator,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -46,15 +46,13 @@ interface ArtworkSlot {
   breadth: string;
   sizeUnit: SizeUnit;
   medium: string;
-  price: string;
-  availableForSale: boolean;
   description: string;
   uploaded: boolean;
   submitting: boolean;
 }
 
 function emptySlot(): ArtworkSlot {
-  return { title: '', length: '', breadth: '', sizeUnit: 'in', medium: '', price: '', availableForSale: true, description: '', uploaded: false, submitting: false };
+  return { title: '', length: '', breadth: '', sizeUnit: 'in', medium: '', description: '', uploaded: false, submitting: false };
 }
 
 function formatSize(slot: ArtworkSlot): string | null {
@@ -150,8 +148,9 @@ export default function ConsultantPortfolioUpdateScreen({ navigation, route }: a
         title:          slot.title.trim(),
         size:           formatSize(slot),
         medium:         slot.medium.trim() || null,
-        price:          parseFloat(slot.price.replace(/,/g, '')) || 0,
-        available:      slot.availableForSale,
+        // Showcase work carries no commercial fields at all.
+        price:          null,
+        available:      false,
         description:    slot.description.trim() || null,
         images:         cloudCrops ? [cloudCrops.square] : [],
         image_variants: cloudCrops ?? null,
@@ -318,20 +317,9 @@ export default function ConsultantPortfolioUpdateScreen({ navigation, route }: a
             <Text style={s.fieldLabel}>MEDIUM</Text>
             <TextInput style={s.input} placeholder="e.g. Oil on Canvas" placeholderTextColor={colors.textTertiary} value={slot.medium} onChangeText={v => updateSlot(idx, { medium: v })} editable={mode === 'edit'} />
 
-            <Text style={s.fieldLabel}>PRICE</Text>
-            <TextInput style={s.input} placeholder="₹ 1,200.00" placeholderTextColor={colors.textTertiary} value={slot.price} onChangeText={v => updateSlot(idx, { price: v })} keyboardType="decimal-pad" editable={mode === 'edit'} />
-
-            {/* Available for sale toggle */}
-            <View style={s.toggleRow}>
-              <Text style={s.toggleLabel}>Available for sale</Text>
-              <Switch
-                value={slot.availableForSale}
-                onValueChange={v => updateSlot(idx, { availableForSale: v })}
-                thumbColor="#fff"
-                trackColor={{ true: TEAL, false: '#CBD5E1' }}
-                disabled={mode !== 'edit'}
-              />
-            </View>
+            {/* No price, no availability toggle. This is a showcase: work put
+                here exists to prove the creator can do the job, not to be
+                bought. Anything for sale is added from the SALES tab. */}
 
             <Text style={s.fieldLabel}>DESCRIPTION</Text>
             <TextInput
@@ -448,8 +436,6 @@ const s = StyleSheet.create({
   unitDropdownItem: { paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   unitDropdownItemText: { fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textPrimary },
   unitDropdownItemTextActive: { fontFamily: fonts.heavy, color: NAVY, fontWeight: '700' },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12 },
-  toggleLabel: { fontSize: fontSizes.base, fontFamily: fonts.heavy, color: TEAL, fontWeight: '700' },
   textarea: { backgroundColor: '#F8F9FB', borderRadius: 10, borderWidth: 1, borderColor: colors.borderInput, paddingHorizontal: 14, paddingVertical: 12, fontSize: fontSizes.sm + 1, fontFamily: fonts.body, color: colors.textPrimary, minHeight: 80, marginHorizontal: 12, marginBottom: 12 },
   slotBtnRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 12, paddingBottom: 14 },
   saveBtn: { flex: 1, backgroundColor: NAVY, borderRadius: 10, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
