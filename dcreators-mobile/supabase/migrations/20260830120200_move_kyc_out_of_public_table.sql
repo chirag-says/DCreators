@@ -20,7 +20,9 @@
 -- consultant_profiles, which is exactly how this leaked to clients that never
 -- asked for it.
 
-BEGIN;
+-- No explicit BEGIN/COMMIT: `supabase db push` already runs each migration
+-- inside a transaction, and an inner COMMIT would end the outer one early,
+-- leaving the history insert outside it.
 
 CREATE TABLE IF NOT EXISTS consultant_kyc (
   consultant_id UUID PRIMARY KEY
@@ -72,8 +74,6 @@ ALTER TABLE consultant_profiles
   DROP COLUMN IF EXISTS bank_name,
   DROP COLUMN IF EXISTS ifsc_code,
   DROP COLUMN IF EXISTS bank_account_number;
-
-COMMIT;
 
 -- Verify: expect zero rows back, i.e. the columns are gone from the readable
 -- table and the data survived the move.
