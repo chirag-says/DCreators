@@ -4,20 +4,19 @@ import {
   ScrollView, Image, Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import TopHeader from '../components/TopHeader';
-import { ChevronDown, ChevronRight, Camera, Square, CheckSquare, X, ImagePlus, Save, ArrowLeft } from 'lucide-react-native';
+import ScreenHeader from '../components/ScreenHeader';
+import { ChevronDown, ChevronRight, Camera, Square, CheckSquare, X, ImagePlus, Save } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { updateConsultantProfileByUserId } from '../services/consultantService';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
+import { EXPERIENCE_OPTIONS } from '../config/profileOptions';
 
 
 const CATEGORIES = [
   'Photography', 'Videography', 'Design', 'Painting',
   'Sculpture', 'Traditional Craft', 'Illustration',
 ];
-
-const EXPERIENCE_OPTIONS = ['1-3 years', '3-5 years', '5-10 years', '10+ years'];
 
 export default function EditConsultantProfileScreen({ navigation }: any) {
   const { consultantProfile, profile, fetchConsultantProfile } = useAuthStore();
@@ -213,18 +212,10 @@ export default function EditConsultantProfileScreen({ navigation }: any) {
   return (
     <View style={styles.bg}>
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-        <TopHeader />
+        <ScreenHeader title="Edit Profile" />
 
         <ScrollView style={styles.mainScroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
 
-          {/* Back + Title */}
-          <View style={styles.titleRow}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-              <ArrowLeft size={22} color="#1F2937" />
-            </TouchableOpacity>
-            <Text style={styles.pageTitle}>Edit Profile</Text>
-            <View style={{ width: 36 }} />
-          </View>
 
           {/* Profile Image */}
           <View style={styles.avatarSection}>
@@ -430,9 +421,6 @@ const styles = StyleSheet.create({
   bg: { flex: 1, backgroundColor: colors.screenBg },
   safe: { flex: 1 },
   mainScroll: { flex: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: 14 },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' },
-  pageTitle: { fontSize: fontSizes['2xl'], fontFamily: fonts.heavy, color: colors.textPrimary },
   avatarSection: { alignItems: 'center', marginBottom: spacing.xl },
   avatarFrame: { width: 110, height: 130, borderRadius: radii.md, borderWidth: 2.5, borderColor: '#E8854A', overflow: 'hidden', backgroundColor: colors.sectionBg },
   avatarImage: { width: '100%', height: '100%' },

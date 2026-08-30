@@ -6,10 +6,10 @@ import {
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import {
-  ArrowLeft, CheckCircle, CreditCard, Smartphone, Building2,
+  CheckCircle, CreditCard, Smartphone, Building2,
   Shield, Lock, X, AlertCircle,
 } from 'lucide-react-native';
-import TopHeader from '../components/TopHeader';
+import ScreenHeader from '../components/ScreenHeader';
 import { supabase } from '../lib/supabase';
 import { updateProjectStatus } from '../services/projectService';
 import { createCashfreeOrder, verifyPaymentStatus } from '../lib/cashfree';
@@ -207,20 +207,11 @@ export default function PaymentScreen({ navigation, route }: any) {
   return (
     <View style={styles.bg}>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <TopHeader />
+        <ScreenHeader title={paymentType === 'advance' ? 'Advance Payment' : 'Balance Payment'} />
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
           <View style={styles.container}>
 
-            <View style={styles.titleRow}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                <ArrowLeft size={20} color={colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={styles.pageTitle}>
-                {paymentType === 'advance' ? 'Advance Payment' : 'Balance Payment'}
-              </Text>
-              <View style={{ width: 36 }} />
-            </View>
 
             {isPaid ? (
               <Animated.View style={[styles.successCard, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
@@ -437,9 +428,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
 
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xl },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' },
-  pageTitle: { fontSize: fontSizes.xl, fontFamily: fonts.heavy, color: colors.textPrimary },
 
   card: {
     backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 1, borderColor: '#E6E6E6',

@@ -119,7 +119,10 @@ export async function fetchClientProjects(clientId: string): Promise<ProjectWith
 /**
  * Fetch completed projects for history view.
  */
-export async function fetchProjectHistory(userId: string, role: 'client' | 'consultant'): Promise<Project[]> {
+export async function fetchProjectHistory(
+  userId: string,
+  role: 'client' | 'consultant',
+): Promise<ProjectWithConsultant[]> {
   const column = role === 'client' ? 'client_id' : 'consultant_id';
   const { data, error } = await supabase
     .from('projects')
@@ -133,7 +136,10 @@ export async function fetchProjectHistory(userId: string, role: 'client' | 'cons
     throw new Error(error.message);
   }
 
-  return (data ?? []) as Project[];
+  // Consultant names attached, same as fetchClientProjects: the Completed
+  // segment of the client's Activity tab renders these through
+  // ClientProjectRow, which shows who did the work.
+  return attachConsultantProfiles((data ?? []) as Project[]) as Promise<ProjectWithConsultant[]>;
 }
 
 /**

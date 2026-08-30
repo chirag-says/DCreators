@@ -67,7 +67,6 @@ import ConsultantProjectManagementScreen from './src/screens/ConsultantProjectMa
 import ConsultantCategoryDetailsScreen from './src/screens/ConsultantCategoryDetailsScreen';
 
 // Phase 6 — Remaining Figma Screens
-import HireConsultantScreen from './src/screens/HireConsultantScreen';
 import ConsultantPortfolioUpdateScreen from './src/screens/ConsultantPortfolioUpdateScreen';
 import PaymentConfirmedScreen from './src/screens/PaymentConfirmedScreen';
 import ArtistSalesRequestDetailScreen from './src/screens/ArtistSalesRequestDetailScreen';
@@ -177,7 +176,6 @@ export default function App() {
           <Stack.Screen name="ConsultantCategoryDetails" component={ConsultantCategoryDetailsScreen} />
 
           {/* Phase 6 — Remaining Figma Screens */}
-          <Stack.Screen name="HireConsultant" component={HireConsultantScreen} />
           <Stack.Screen name="BookConsultant" component={BookConsultantScreen} />
 
           {/* Phase 7 — Bidding with priority list + negotiation chat */}

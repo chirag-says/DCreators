@@ -24,6 +24,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import TopHeader from '../components/TopHeader';
 import { getAssignmentTitle } from '../lib/assignment';
+import { toPriceUnit } from '../lib/booking';
 import { fetchConsultantProducts, deleteShopProduct } from '../services/shopService';
 import { fetchConsultantDashboardProjects } from '../services/projectService';
 
@@ -136,6 +137,7 @@ export default function CreatorDashboardScreen({ navigation }: any) {
     portfolio_banner_image: consultantProfile?.portfolio_banner_image ?? null,
     category: consultantProfile?.category ?? 'designer',
     base_price: consultantProfile?.base_price ?? null,
+    price_unit: toPriceUnit(consultantProfile?.price_unit),
     is_approved: consultantProfile?.is_approved ?? false,
   };
 

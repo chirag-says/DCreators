@@ -1,10 +1,10 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Platform, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import TopHeader from '../components/TopHeader';
+import ScreenHeader from '../components/ScreenHeader';
 import { updateProjectStatus, fetchLatestSubmission, updateSubmissionFeedback } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
-import { ArrowLeft, Check, RotateCcw, Pause, X, MessageSquare } from 'lucide-react-native';
+import { Check, RotateCcw, Pause, X, MessageSquare } from 'lucide-react-native';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 
 // Next status per round when client approves
@@ -148,17 +148,10 @@ export default function ClientReviewScreen({ navigation, route }: any) {
   return (
     <View style={styles.bg}>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <TopHeader />
+        <ScreenHeader title="Review Design" />
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
           <View style={styles.container}>
 
-            <View style={styles.titleRow}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                <ArrowLeft size={20} color={colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={styles.pageTitle}>Review Design</Text>
-              <View style={{ width: 36 }} />
-            </View>
 
             {loading ? (
               <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
@@ -312,9 +305,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
 
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' },
-  pageTitle: { fontSize: fontSizes.xl, fontFamily: fonts.heavy, color: colors.textPrimary },
 
   emptyState: { alignItems: 'center', marginTop: spacing['5xl'], gap: spacing.sm },
   emptyTitle: { fontSize: fontSizes.lg, fontFamily: fonts.heavy, color: colors.textSecondary },

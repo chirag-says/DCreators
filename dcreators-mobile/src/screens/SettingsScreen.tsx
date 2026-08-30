@@ -1,9 +1,9 @@
 ﻿import React from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, Bell, Shield, HelpCircle, LogOut, ChevronRight, ChevronLeft } from 'lucide-react-native';
-import TopHeader from '../components/TopHeader';
+import { User, Bell, Shield, HelpCircle, LogOut, ChevronRight, ChevronLeft, Repeat2 } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
+import { useRoleSwitch } from '../hooks/useRoleSwitch';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 
 
@@ -12,6 +12,7 @@ export default function SettingsScreen({ navigation }: any) {
   const { profile, signOut, currentRole } = useAuthStore();
   const displayName = profile?.name || 'User';
   const displayEmail = profile?.email || 'user@example.com';
+  const { canSwitch, toggle: toggleRole } = useRoleSwitch(navigation);
 
   async function handleLogout() {
     await signOut();
@@ -51,10 +52,33 @@ export default function SettingsScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
 
+            {/* IntroScreen tells people "You can switch roles later in
+                settings" at signup. Until now that promise led nowhere —
+                the only switch was a pill in the header. */}
+            {canSwitch && (
+              <View style={styles.settingsGroup}>
+                <Text style={styles.groupTitle}>Role</Text>
+                <TouchableOpacity style={styles.settingRow} onPress={toggleRole} activeOpacity={0.7}>
+                  <View style={styles.settingIconBg}>
+                    <Repeat2 size={20} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingText}>
+                      Switch to {currentRole === 'consultant' ? 'Client' : 'Creator'}
+                    </Text>
+                    <Text style={styles.settingSubText}>
+                      Currently browsing as {currentRole === 'consultant' ? 'a Creator' : 'a Client'}
+                    </Text>
+                  </View>
+                  <ChevronRight size={20} color={colors.textTertiary} />
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Settings Options */}
             <View style={styles.settingsGroup}>
               <Text style={styles.groupTitle}>Account</Text>
-              
+
               <TouchableOpacity style={styles.settingRow}>
                 <View style={styles.settingIconBg}>
                   <User size={20} color={colors.primary} />
@@ -219,6 +243,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
     fontFamily: fonts.medium,
+  },
+  settingSubText: {
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+    fontFamily: fonts.body,
+    marginTop: 2,
   },
 
   logoutBtn: {

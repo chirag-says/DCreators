@@ -7,6 +7,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import type { Project, ConsultantProfile, ShopProduct, BidRequest } from './index';
+import type { PriceUnit } from '../lib/booking';
 
 // ─── Dashboard Creator View Model ────────────────────────────
 export interface CreatorCardViewModel {
@@ -23,6 +24,8 @@ export interface CreatorCardViewModel {
   portfolio_banner_image?: string | null;
   category: string;
   base_price: number | null;
+  /** Optional: the screens that hand-build this view model predate the column. */
+  price_unit?: PriceUnit;
   is_approved: boolean;
   user_id: string;
 }
@@ -84,7 +87,6 @@ export type RootStackParamList = {
   ConsultantCategoryDetails: { fromOnboarding?: boolean } | undefined;
 
   // Phase 6 — Remaining Figma Screens
-  HireConsultant: { consultant?: any } | undefined;
   // owner_role: CLIENT  previous: CreatorProfile "Hire Now"  next: Main/CreatorWorkorder (status: assigned)
   BookConsultant: { consultant: CreatorCardViewModel };
   ConsultantPortfolioUpdate: { fromOnboarding?: boolean } | undefined;
@@ -110,7 +112,8 @@ export type RootStackParamList = {
   Invoice: { project: Project };
   SavedCreators: undefined;
   RatingReview: { project: Project };
-  Shop: undefined;
+  // Scoped to one creator when pushed from their profile's Shop button.
+  Shop: { consultantId?: string; consultantName?: string } | undefined;
   ProductDetails: { product: ShopProduct & { consultant_profiles?: { user_id: string; display_name: string; code: string } } };
   MessagesList: undefined;
   MyProducts: undefined;

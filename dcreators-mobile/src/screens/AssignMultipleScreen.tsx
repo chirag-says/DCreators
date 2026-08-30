@@ -2,7 +2,7 @@
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CheckCircle } from 'lucide-react-native';
-import TopHeader from '../components/TopHeader';
+import ScreenHeader from '../components/ScreenHeader';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 
 
@@ -10,7 +10,7 @@ export default function AssignMultipleScreen({ navigation }: any) {
   return (
     <View style={styles.backgroundImage}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <TopHeader />
+        <ScreenHeader title="Assign to Multiple" />
         
         <ScrollView style={styles.mainScroll} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
           <View style={styles.container}>

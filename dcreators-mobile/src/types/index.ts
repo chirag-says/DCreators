@@ -3,6 +3,8 @@
 // Master type definitions for all entities
 // ============================================
 
+import type { PriceUnit, DurationUnit } from '../lib/booking';
+
 export interface Profile {
   id: string;
   name: string;
@@ -34,6 +36,8 @@ export interface ConsultantProfile {
   portfolio_card_image: string | null;
   portfolio_banner_image: string | null;
   base_price: number | null;
+  /** What base_price is quoted against. NOT NULL in the DB, defaults per_project. */
+  price_unit: PriceUnit;
   is_approved: boolean;
   is_active: boolean;
   // KYC / banking — collected on the Create Creator's Account screen
@@ -86,6 +90,12 @@ export interface Project {
   // The date being booked (e.g. the wedding/shoot day) — distinct from
   // `deadline`, which is the delivery deadline for the finished work.
   event_date: string | null;
+  // Call time on event_date, and how long the consultant is held for. All null
+  // on the bidding path and on rows predating 20260829120100 — the direct
+  // booking screen is the only flow that collects them.
+  start_time: string | null;
+  duration_value: number | null;
+  duration_unit: DurationUnit | null;
   budget: number;
   // The CURRENT proposed/agreed price under negotiation. Starts equal to
   // `budget` (client's opening offer); updated as either side counters; frozen

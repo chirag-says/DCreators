@@ -14,7 +14,7 @@ import {
   TextInput, Platform, Alert, ActivityIndicator, Image, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import TopHeader from '../components/TopHeader';
+import ScreenHeader from '../components/ScreenHeader';
 import { updateProjectStatus, fetchProjectSubmissions, createSubmission, createCollaborationRequest, proposeProjectPrice, acceptProjectPrice, closeNegotiation, fetchProjectById } from '../services/projectService';
 import { fetchApprovedConsultants } from '../services/consultantService';
 import { sendNotification } from '../lib/notifications';
@@ -26,6 +26,7 @@ import {
   CalendarClock, CheckCircle2, IndianRupee,
 } from 'lucide-react-native';
 import { getAssignmentTitle } from '../lib/assignment';
+import { formatSchedule } from '../lib/booking';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 import type { Submission, ConsultantProfile } from '../types';
 
@@ -323,7 +324,7 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <TopHeader />
+      <ScreenHeader title="Project" />
       {loading ? (
         <View style={styles.loadingWrap}><ActivityIndicator size="large" color={colors.orange} /></View>
       ) : (
@@ -366,6 +367,20 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
             </View>
             <Text style={styles.budgetValue}>₹{budget.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
           </View>
+
+          {/* When and for how long. This screen is where the consultant accepts
+              or counters, and until now it told them the fee and the brief but
+              never the call time — they were agreeing to a day they could not
+              see. Absent on bidding-path projects, which never collect one. */}
+          {formatSchedule(project) && (
+            <View style={styles.briefBlock}>
+              <View style={styles.briefBlockHeader}>
+                <CalendarClock size={14} color={colors.primary} />
+                <Text style={styles.briefBlockTitle}>WHEN</Text>
+              </View>
+              <Text style={styles.scheduleValue}>{formatSchedule(project)}</Text>
+            </View>
+          )}
 
           {/* Assignment brief quote */}
           {project?.assignment_brief && (
@@ -487,7 +502,8 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
                             <Text style={styles.consultantName}>{c.display_name}</Text>
                             <Text style={styles.consultantCode}>Code: {c.code}</Text>
                             <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-                              {c.experience && <View style={styles.badge}><Text style={styles.badgeText}>{c.experience} Years</Text></View>}
+                              {/* Bare: consultant_profiles.experience already reads "5-10 years". */}
+                              {c.experience && <View style={styles.badge}><Text style={styles.badgeText}>{c.experience}</Text></View>}
                               {c.is_approved && (
                                 <View style={[styles.badge, { backgroundColor: '#EEF9F8', flexDirection: 'row', gap: 4 }]}>
                                   <BadgeCheck size={10} color={colors.teal} />
@@ -752,6 +768,7 @@ const styles = StyleSheet.create({
   briefBlockHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   briefBlockTitle: { fontSize: 11, fontWeight: '700', fontFamily: fonts.heavy, color: colors.primary, letterSpacing: 0.5 },
   briefQuote: { fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textSecondary, lineHeight: 24, fontStyle: 'italic' },
+  scheduleValue: { fontSize: fontSizes.lg, fontFamily: fonts.heavy, fontWeight: '700', color: colors.primary },
 
   deliverablesBlock: {
     marginHorizontal: spacing.xl, backgroundColor: '#fff', borderRadius: 14, padding: 18,

@@ -16,17 +16,27 @@ export interface ShopProductWithConsultant extends ShopProduct {
 }
 
 /**
- * Fetch all active shop products with consultant info.
+ * Fetch active shop products with consultant info.
+ *
+ * Pass `consultantId` (a consultant_profiles.id) to scope it to one creator's
+ * shop. Both the Shop button on CreatorProfileScreen and the shop view it
+ * opens go through here, so the button cannot appear over an empty shop —
+ * `is_active` and `kind` are applied once, in one place.
  */
-export async function fetchShopProducts(): Promise<ShopProductWithConsultant[]> {
-  const { data, error } = await supabase
+export async function fetchShopProducts(consultantId?: string): Promise<ShopProductWithConsultant[]> {
+  let request = supabase
     .from('shop_products')
     .select('*, consultant_profiles(user_id, display_name, code)')
     .eq('is_active', true)
     // The shop sells things. Showcase pieces have no price and are not for
     // sale, so they belong on the creator's profile, not on a buying surface.
-    .eq('kind', 'listing')
-    .order('created_at', { ascending: false });
+    .eq('kind', 'listing');
+
+  if (consultantId) {
+    request = request.eq('consultant_id', consultantId);
+  }
+
+  const { data, error } = await request.order('created_at', { ascending: false });
 
   if (error) {
     console.error('[ShopService] fetchShopProducts error:', error.message);

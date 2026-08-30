@@ -22,7 +22,7 @@ import {
   CheckCircle2, MessageCircle, IndianRupee, CalendarClock,
   Wallet, FileSignature, Palette, ArrowRight,
 } from 'lucide-react-native';
-import TopHeader from '../components/TopHeader';
+import ScreenHeader from '../components/ScreenHeader';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { getAssignmentTitle } from '../lib/assignment';
 
@@ -73,7 +73,7 @@ export default function AssignmentAcceptedScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <TopHeader />
+      <ScreenHeader title="Assignment Accepted" />
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 

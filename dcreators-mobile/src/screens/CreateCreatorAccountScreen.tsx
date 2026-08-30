@@ -21,6 +21,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { upsertConsultantProfile } from '../services/consultantService';
 import { uploadToCloudinary, uploadRawToCloudinary } from '../lib/cloudinary';
 import { colors, fonts, fontSizes } from '../styles/theme';
+import { EXPERIENCE_OPTIONS } from '../config/profileOptions';
 
 const NAVY = '#1B3A5C';
 const TEAL = '#3D9B8F';
@@ -66,6 +67,7 @@ export default function CreateCreatorAccountScreen({ navigation }: any) {
   const [showPreview, setShowPreview] = useState(false);
 
   const [experience, setExperience] = useState('');
+  const [showExperienceDropdown, setShowExperienceDropdown] = useState(false);
   const [institutionName, setInstitutionName] = useState('');
   const [aadhar, setAadhar] = useState('');
   const [pan, setPan] = useState('');
@@ -210,14 +212,33 @@ export default function CreateCreatorAccountScreen({ navigation }: any) {
           </Text>
         </View>
 
+        {/* Picked from a fixed list, not typed: the value is shown verbatim on
+            the public profile, so it has to carry its own unit consistently. */}
         <Text style={s.fieldLabel}>PROFESSIONAL EXPERIENCE</Text>
-        <TextInput
-          style={s.input}
-          placeholder="e.g. 5 years"
-          placeholderTextColor={colors.textTertiary}
-          value={experience}
-          onChangeText={setExperience}
-        />
+        <TouchableOpacity
+          style={s.dropdownTrigger}
+          onPress={() => setShowExperienceDropdown(v => !v)}
+          activeOpacity={0.85}
+        >
+          <Text style={[s.dropdownValue, !experience && s.dropdownPlaceholder]} numberOfLines={1}>
+            {experience || 'Select your experience'}
+          </Text>
+          <ChevronDown size={18} color={colors.textSecondary} style={{ transform: [{ rotate: showExperienceDropdown ? '180deg' : '0deg' }] }} />
+        </TouchableOpacity>
+        {showExperienceDropdown && (
+          <View style={s.dropdownList}>
+            {EXPERIENCE_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt}
+                style={[s.dropdownItem, opt === experience && s.dropdownItemActive]}
+                onPress={() => { setExperience(opt); setShowExperienceDropdown(false); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.dropdownItemText, opt === experience && s.dropdownItemTextActive]}>{opt}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <Text style={s.fieldLabel}>INSTITUTION / ORGANIZATION</Text>
         <TextInput

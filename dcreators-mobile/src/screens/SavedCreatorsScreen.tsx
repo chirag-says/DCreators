@@ -120,6 +120,7 @@ export default function SavedCreatorsScreen({ navigation }: any) {
                       expertise: creator.expertise,
                       category: creator.category,
                       base_price: creator.base_price,
+                      price_unit: creator.price_unit,
                       avatar_url: creator.avatar_url,
                       portfolio_images: creator.portfolio_images,
                     }

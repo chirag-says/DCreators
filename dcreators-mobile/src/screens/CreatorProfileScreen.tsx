@@ -1,13 +1,15 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, Dimensions, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Heart, Award, Tag, ShieldCheck, Box, Camera, Hash, BadgeCheck } from 'lucide-react-native';
-import TopHeader from '../components/TopHeader';
+import { ChevronLeft, ChevronRight, Heart, Award, Tag, ShieldCheck, Camera, Video, PenTool, Palette, Hammer, BadgeCheck, ShoppingBag } from 'lucide-react-native';
+import ScreenHeader from '../components/ScreenHeader';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
 import { RemoteAssets } from '../lib/assets';
 import RatingStars from '../components/RatingStars';
 import { fetchConsultantRatings, type ConsultantRating } from '../services/consultantService';
+import { PRICE_UNIT_SUFFIX, toPriceUnit } from '../lib/booking';
+import { fetchShopProducts } from '../services/shopService';
 
 
 const { width } = Dimensions.get('window');
@@ -32,6 +34,17 @@ const CATEGORY_LABELS: Record<string, string> = {
   artisan: 'Traditional Craft',
 };
 
+// The Expertise stat used to be a hardcoded camera, so a designer's profile
+// advertised them with a camera icon. Keyed to the five DB values of
+// consultant_profiles.category (see AssignmentCategory in lib/assignment).
+const CATEGORY_ICONS: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
+  photographer: Camera,
+  videographer: Video,
+  designer: PenTool,
+  sculptor: Palette,
+  artisan: Hammer,
+};
+
 export default function CreatorProfileScreen({ route, navigation }: any) {
   const creator = route?.params?.creator;
   const [activeImage, setActiveImage] = useState(0);
@@ -49,21 +62,35 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
     });
     return () => { cancelled = true; };
   }, [creator?.user_id]);
+
+  // Whether this creator has anything for sale. Same query the shop view runs,
+  // so the button can never open an empty shop.
+  const [listingCount, setListingCount] = useState(0);
+  useEffect(() => {
+    const consultantId = creator?.id;
+    if (!consultantId) return;
+    let cancelled = false;
+    fetchShopProducts(consultantId)
+      .then(rows => { if (!cancelled) setListingCount(rows.length); })
+      .catch(() => { if (!cancelled) setListingCount(0); });
+    return () => { cancelled = true; };
+  }, [creator?.id]);
+
   const currentRole = useAuthStore((s) => s.currentRole);
 
   const name = creator?.name || 'Creator';
-  const code = creator?.code || 'D000';
   const subtitle = creator?.subtitle || '';
   const experience = creator?.experience || '';
   const expertise = creator?.expertise || '';
   const category = creator?.category || 'photographer';
   const basePrice = creator?.base_price;
+  const priceUnit = toPriceUnit(creator?.price_unit);
   const avatarKey = creator?.avatarKey || category;
   const portfolioKeys: string[] = creator?.portfolioKeys || getDefaultPortfolio(category);
 
   // Derive display fields matching the Figma layout
   const categoryLabel = CATEGORY_LABELS[category] || category.charAt(0).toUpperCase() + category.slice(1);
-  const productCode = `${code.replace('D', 'BB')}/01`;
+  const ExpertiseIcon = CATEGORY_ICONS[category] || Camera;
 
   function getDefaultPortfolio(cat: string): string[] {
     switch (cat) {
@@ -88,20 +115,18 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
   return (
     <View style={styles.bg}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <TopHeader />
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces={false}>
-
-          {/* ── Title row: back + category + favorite ── */}
-          <View style={styles.titleRow}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-              <ChevronLeft size={24} color={colors.primary} />
-            </TouchableOpacity>
-            <Text style={styles.categoryTitle}>{categoryLabel}</Text>
-            <View style={{ flex: 1 }} />
+        {/* This screen used to carry TopHeader and its own ChevronLeft at the
+            same time — a hamburger, a global search and a back arrow all
+            competing on a screen whose only job is to be left again. */}
+        <ScreenHeader
+          title={categoryLabel}
+          right={
             <TouchableOpacity style={styles.favBtn} onPress={() => setFav(f => !f)} activeOpacity={0.8}>
               <Heart size={20} color={fav ? colors.orange : colors.primary} fill={fav ? colors.orange : 'transparent'} />
             </TouchableOpacity>
-          </View>
+          }
+        />
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces={false}>
 
           {/* ── Large Artwork Image Card ── */}
           <View style={styles.artworkCard}>
@@ -157,33 +182,27 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
                 {experience ? (
                   <View style={styles.expPill}>
                     <Award size={13} color={colors.primary} />
-                    <Text style={styles.expPillText}>{experience} Years Experience</Text>
+                    {/* Rendered bare: the stored value already carries its
+                        unit ("5-10 years"), so any suffix here doubles it. */}
+                    <Text style={styles.expPillText}>{experience}</Text>
                   </View>
                 ) : null}
               </View>
             </View>
 
-            {/* Stats grid */}
+            {/* Stats grid. Code and Product Code used to sit here; they are
+                internal identifiers that mean nothing to a client browsing,
+                so they stay in the DB and admin panel only. */}
             <View style={styles.statsGrid}>
               <View style={[styles.statCol, styles.statDivider]}>
-                <Hash size={18} color={colors.primary} />
-                <Text style={styles.statLabel}>Code</Text>
-                <Text style={styles.statValue} numberOfLines={1}>{code}</Text>
-              </View>
-              <View style={[styles.statCol, styles.statDivider]}>
-                <Box size={18} color={colors.primary} />
-                <Text style={styles.statLabel}>Product Code</Text>
-                <Text style={styles.statValue} numberOfLines={1}>{productCode}</Text>
-              </View>
-              <View style={[styles.statCol, styles.statDivider]}>
-                <Camera size={18} color={colors.primary} />
+                <ExpertiseIcon size={18} color={colors.primary} />
                 <Text style={styles.statLabel}>Expertise</Text>
                 <Text style={styles.statValue} numberOfLines={1}>{expertiseLabel}</Text>
               </View>
               <View style={styles.statCol}>
                 <Award size={18} color={colors.primary} />
                 <Text style={styles.statLabel}>Experience</Text>
-                <Text style={styles.statValue} numberOfLines={1}>{experience ? `${experience} Years` : '—'}</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{experience || '—'}</Text>
               </View>
             </View>
 
@@ -195,8 +214,14 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
                 </View>
                 <View>
                   <Text style={styles.priceCaption}>Price</Text>
+                  {/* "(INR)" said nothing a ₹ symbol had not already said, while
+                      the number itself carried no unit — two consultants quoting
+                      4,900 could mean a day or a whole project. */}
                   {basePrice ? (
-                    <Text style={styles.priceValue}>₹ {basePrice.toLocaleString('en-IN')} <Text style={styles.priceUnit}>(INR)</Text></Text>
+                    <Text style={styles.priceValue}>
+                      ₹{basePrice.toLocaleString('en-IN')}{' '}
+                      <Text style={styles.priceUnit}>{PRICE_UNIT_SUFFIX[priceUnit]}</Text>
+                    </Text>
                   ) : (
                     <Text style={styles.priceValue}>On request</Text>
                   )}
@@ -211,17 +236,34 @@ export default function CreatorProfileScreen({ route, navigation }: any) {
 
           {/* ── Hire Now CTA (client / buyer view only) ── */}
           {currentRole !== 'consultant' && (
-            <TouchableOpacity
-              style={styles.hireBtn}
-              onPress={() => navigation.navigate('BookConsultant', { consultant: creator })}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.hireBtnText}>Hire Now  →</Text>
-              <View style={styles.hireSubRow}>
-                <ShieldCheck size={13} color="rgba(255,255,255,0.85)" />
-                <Text style={styles.hireSubText}>Secure • Verified • Trusted</Text>
-              </View>
-            </TouchableOpacity>
+            <View style={styles.ctaRow}>
+              <TouchableOpacity
+                style={[styles.hireBtn, { flex: 1 }]}
+                onPress={() => navigation.navigate('BookConsultant', { consultant: creator })}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.hireBtnText}>Hire Now  →</Text>
+                <View style={styles.hireSubRow}>
+                  <ShieldCheck size={13} color="rgba(255,255,255,0.85)" />
+                  <Text style={styles.hireSubText}>Secure • Verified • Trusted</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Hiring a creator and buying a finished piece are two different
+                  intentions. Only offered when there is actually something on
+                  sale — a Shop button over an empty shop is worse than none. */}
+              {listingCount > 0 && (
+                <TouchableOpacity
+                  style={styles.shopBtn}
+                  onPress={() => navigation.navigate('Shop', { consultantId: creator.id, consultantName: name })}
+                  activeOpacity={0.85}
+                >
+                  <ShoppingBag size={20} color={colors.primary} />
+                  <Text style={styles.shopBtnText}>Shop</Text>
+                  <Text style={styles.shopBtnCount}>{listingCount} for sale</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
 
         </ScrollView>
@@ -239,24 +281,6 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
   },
 
-  /* ── Title row ── */
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-    gap: spacing.xs,
-  },
-  backBtn: {
-    width: 28, height: 28, alignItems: 'center', justifyContent: 'center',
-  },
-  categoryTitle: {
-    fontSize: fontSizes.xl,
-    fontFamily: fonts.heavy,
-    fontWeight: '800',
-    color: colors.primary,
-    fontStyle: 'italic',
-    letterSpacing: 0.3,
-  },
   favBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: colors.cardBg,
@@ -466,15 +490,45 @@ const styles = StyleSheet.create({
     color: colors.teal,
   },
 
-  /* ── Hire Now CTA ── */
+  /* ── Hire Now + Shop CTAs ── */
+  // stretch so the outlined Shop button matches the two-line Hire Now height.
+  ctaRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    marginBottom: 24,
+  },
   hireBtn: {
     backgroundColor: '#1B3A5C',
     borderRadius: radii.lg,
     paddingVertical: 16,
     alignItems: 'center',
-    marginTop: spacing.lg,
-    marginBottom: 24,
+    justifyContent: 'center',
     ...shadows.md,
+  },
+  shopBtn: {
+    width: 108,
+    borderRadius: radii.lg,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: colors.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingHorizontal: spacing.sm,
+  },
+  shopBtnText: {
+    color: colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: '800',
+    fontFamily: fonts.heavy,
+  },
+  shopBtnCount: {
+    color: colors.textTertiary,
+    fontSize: fontSizes.xs,
+    fontFamily: fonts.medium,
+    fontWeight: '600',
   },
   hireBtnText: {
     color: '#fff',

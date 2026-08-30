@@ -134,6 +134,7 @@ export default function SearchScreen({ navigation }: any) {
       expertise: consultant.expertise,
       category: consultant.category,
       base_price: consultant.base_price,
+      price_unit: consultant.price_unit,
       avatar_url: consultant.avatar_url,
       portfolio_images: consultant.portfolio_images,
     }});

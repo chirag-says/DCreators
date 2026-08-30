@@ -1,8 +1,14 @@
 /**
  * MonthCalendar — reusable month-grid date picker.
  * Pure presentational: caller owns availability data and selection state.
- * Three visual states per day: available (white), taken (gray, disabled),
- * selected (navy). Used by BookConsultantScreen for picking a booking date.
+ * Four visual states per day: available (white), booked (grey fill, struck
+ * through), past (no fill, recessive text), selected (navy).
+ * Used by BookConsultantScreen for picking a booking date.
+ *
+ * Booked and past used to be #E5E7EB and #F8F9FB — two near-whites on a white
+ * card, telling the client nothing about why a day could not be tapped. Booked
+ * now carries a strikethrough as well as a fill, so the "unavailable" signal
+ * does not depend on distinguishing two greys or on seeing colour at all.
  */
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
@@ -10,6 +16,13 @@ import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { colors, fonts, fontSizes, radii } from '../styles/theme';
 
 const NAVY = '#1B3A5C';
+
+// Booked: 6.3:1 text-on-fill, comfortably past WCAG AA. Past: 2.2:1 and
+// deliberately so — it is an inactive control (WCAG 1.4.3 exempts those) and
+// recessing it is the whole point, so long as booked stays legible.
+const BOOKED_FILL = '#C7CDD6';
+const BOOKED_TEXT = '#374151';
+const PAST_TEXT = '#A9B0BC';
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTH_LABELS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -100,7 +113,10 @@ export default function MonthCalendar({
             >
               <Text style={[
                 s.dayText,
-                (isTaken || isPast) && s.dayTextDisabled,
+                isTaken && s.dayTextTaken,
+                // Past wins over taken: a day already gone is unbookable for a
+                // reason the client can act on, so don't dress it as "booked".
+                isPast && s.dayTextPast,
                 isSelected && s.dayTextSelected,
               ]}>
                 {day}
@@ -115,10 +131,22 @@ export default function MonthCalendar({
           <View style={[s.legendDot, { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.borderInput }]} />
           <Text style={s.legendText}>Available</Text>
         </View>
-        <View style={s.legendItem}>
-          <View style={[s.legendDot, { backgroundColor: '#E5E7EB' }]} />
-          <Text style={s.legendText}>Booked</Text>
-        </View>
+        {/* CreateBidScreen passes an empty set — no consultant is chosen yet,
+            so there is nothing to be booked and no key to explain. */}
+        {takenDates.size > 0 && (
+          <View style={s.legendItem}>
+            <View style={[s.legendDot, { backgroundColor: BOOKED_FILL }]} />
+            <Text style={s.legendText}>Booked</Text>
+          </View>
+        )}
+        {/* Past days were greyed out with no legend entry, so a client seeing a
+            dead first week had no way to tell it apart from a fully booked one. */}
+        {disablePast && (
+          <View style={s.legendItem}>
+            <View style={[s.legendDot, { backgroundColor: '#fff', borderWidth: 1, borderColor: PAST_TEXT }]} />
+            <Text style={s.legendText}>Past</Text>
+          </View>
+        )}
         <View style={s.legendItem}>
           <View style={[s.legendDot, { backgroundColor: NAVY }]} />
           <Text style={s.legendText}>Selected</Text>
@@ -138,13 +166,16 @@ const s = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   dayCell: { borderRadius: radii.full },
-  dayCellTaken: { backgroundColor: '#E5E7EB' },
-  dayCellPast: { backgroundColor: '#F8F9FB' },
+  dayCellTaken: { backgroundColor: BOOKED_FILL },
+  // No fill at all: past days recede into the card instead of competing with
+  // booked ones for the same near-white.
+  dayCellPast: { backgroundColor: 'transparent' },
   dayCellSelected: { backgroundColor: NAVY },
   dayText: { fontSize: fontSizes.sm + 1, fontFamily: fonts.medium, color: colors.textPrimary },
-  dayTextDisabled: { color: colors.textTertiary },
+  dayTextTaken: { color: BOOKED_TEXT, textDecorationLine: 'line-through' },
+  dayTextPast: { color: PAST_TEXT, textDecorationLine: 'none' },
   dayTextSelected: { color: '#fff', fontWeight: '800', fontFamily: fonts.heavy },
-  legendRow: { flexDirection: 'row', gap: 16, marginTop: 12, justifyContent: 'center' },
+  legendRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 16, rowGap: 8, marginTop: 12, justifyContent: 'center' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 10, height: 10, borderRadius: 5 },
   legendText: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textSecondary },

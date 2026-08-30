@@ -19,6 +19,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { fetchConsultantServicePricing, upsertConsultantServicePricing, updateConsultantProfile } from '../services/consultantService';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { creativeItemsFor } from '../lib/assignment';
+import { PRICE_UNITS, PRICE_UNIT_LABELS, toPriceUnit, type PriceUnit } from '../lib/booking';
 
 const NAVY = '#1B3A5C';
 const TEAL = '#3D9B8F';
@@ -59,6 +60,9 @@ export default function ConsultantServicePricingScreen({ navigation, route }: an
   const [category,   setCategory]   = useState<Category>('Designer');
   const [showCatDD,  setShowCatDD]  = useState(false);
   const [prices,     setPrices]     = useState<Record<string, string>>({});
+  // One unit for every fee below, not one per service: a consultant who
+  // charges by the day charges by the day for all of it.
+  const [priceUnit,  setPriceUnit]  = useState<PriceUnit>('per_project');
   const [loading,    setLoading]    = useState(true);
   const [saving,     setSaving]     = useState(false);
   const [mode,       setMode]       = useState<'view' | 'edit'>('edit');
@@ -72,6 +76,10 @@ export default function ConsultantServicePricingScreen({ navigation, route }: an
       if (match) setCategory(match);
     }
   }, [consultantProfile?.category]);
+
+  useEffect(() => {
+    setPriceUnit(toPriceUnit(consultantProfile?.price_unit));
+  }, [consultantProfile?.price_unit]);
 
   useEffect(() => { fetchPricing(); }, [category]);
 
@@ -111,6 +119,7 @@ export default function ConsultantServicePricingScreen({ navigation, route }: an
       const subtitle = `${category} Consultant`;
       await updateConsultantProfile(consultantProfile.id, {
         category: CATEGORY_DB_VALUE[category], base_price: basePrice, expertise, subtitle,
+        price_unit: priceUnit,
       });
       await fetchConsultantProfile();
 
@@ -188,6 +197,29 @@ export default function ConsultantServicePricingScreen({ navigation, route }: an
             </View>
           )}
         </View>
+
+        {/* Rate basis. Without this a client saw "₹ 4,900" on the profile with
+            no way to tell a day rate from a whole-project fee. */}
+        <Text style={[s.sectionLabel, { marginTop: 20 }]}>MY FEES ARE QUOTED</Text>
+        <View style={s.unitRow}>
+          {PRICE_UNITS.map(unit => {
+            const active = priceUnit === unit;
+            return (
+              <TouchableOpacity
+                key={unit}
+                style={[s.unitChip, active && s.unitChipActive, !isEditable && s.unitChipLocked]}
+                onPress={() => setPriceUnit(unit)}
+                disabled={!isEditable}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.unitChipText, active && s.unitChipTextActive]}>
+                  {PRICE_UNIT_LABELS[unit]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={s.unitHint}>Shown to clients next to every price on your profile.</Text>
 
         {/* Service fee list */}
         <Text style={[s.sectionLabel, { marginTop: 20 }]}>CONSULTANCY FEES # CREATIVE ITEMS</Text>
@@ -284,6 +316,14 @@ const s = StyleSheet.create({
   dropdownItemActive: { backgroundColor: '#F0F2FF' },
   dropdownItemText: { fontSize: fontSizes.base, fontFamily: fonts.body, color: colors.textPrimary },
   dropdownItemTextActive: { fontWeight: '700', color: NAVY, fontFamily: fonts.heavy },
+  // Rate basis
+  unitRow: { flexDirection: 'row', gap: 8 },
+  unitChip: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: radii.full, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.borderInput },
+  unitChipActive: { backgroundColor: NAVY, borderColor: NAVY },
+  unitChipLocked: { opacity: 0.55 },
+  unitChipText: { fontSize: fontSizes.sm + 1, fontFamily: fonts.medium, color: colors.textSecondary },
+  unitChipTextActive: { color: '#fff', fontWeight: '700', fontFamily: fonts.heavy },
+  unitHint: { fontSize: fontSizes.xs + 1, fontFamily: fonts.body, color: colors.textTertiary, marginTop: 8 },
   // Fee table
   feeTable: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 20, overflow: 'hidden' },
   feeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, gap: 8 },

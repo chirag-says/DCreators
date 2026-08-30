@@ -21,11 +21,12 @@ import {
   Platform, ActivityIndicator, Image, Linking, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import TopHeader from '../components/TopHeader';
+import ScreenHeader from '../components/ScreenHeader';
 import { updateProjectStatus, fetchProjectSubmissions, proposeProjectPrice, acceptProjectPrice, closeNegotiation } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
 import { useAuthStore } from '../store/useAuthStore';
 import PriceNegotiationCard from '../components/PriceNegotiationCard';
+import { formatSchedule } from '../lib/booking';
 import {
   FileText, ImageIcon, ChevronRight, Info,
   ArrowLeft, Lock, Download, Star, MessageCircle, CheckCircle2,
@@ -197,7 +198,7 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
   // ─── Render ───────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <TopHeader />
+      <ScreenHeader title="My Project" />
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -219,6 +220,11 @@ export default function ClientWorkorderScreen({ navigation, route }: any) {
                 ? `Working with "${consultantDisplayName}"`
                 : `Your project with "${consultantDisplayName}"`}
             </Text>
+            {/* What the client actually booked. They chose it two screens ago
+                and had no way to check it afterwards. */}
+            {formatSchedule(project) && (
+              <Text style={styles.projectSchedule}>{formatSchedule(project)}</Text>
+            )}
           </View>
 
           {/* ── PRICE NEGOTIATION (status: assigned) ── */}
@@ -616,6 +622,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: colors.textSecondary,
     lineHeight: 20,
+  },
+  projectSchedule: {
+    fontSize: fontSizes.sm + 1,
+    fontFamily: fonts.medium,
+    fontWeight: '600',
+    color: colors.primary,
+    marginTop: 6,
   },
 
   // ── Category badge ──────────────────────────────────────────

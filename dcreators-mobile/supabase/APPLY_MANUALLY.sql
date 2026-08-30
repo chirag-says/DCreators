@@ -205,3 +205,101 @@ COMMIT;
 -- 4. Expect rowsecurity = true for both archive tables:
 --    SELECT tablename, rowsecurity FROM pg_tables
 --     WHERE schemaname='public' AND tablename LIKE '\_archive%';
+
+
+-- ============================================================================
+-- ADDENDUM 2026-08-29 — 20260829120100_add_price_unit_and_booking_duration
+--
+-- Self-contained: its own transaction, its own idempotency, no dependency on
+-- the block above. Run it whether or not the 2026-08-26 script has been
+-- applied. Safe to re-run.
+--
+-- NOTE before running: 20260826120500_split_showcase_and_listings and
+-- 20260826120600_showcase_has_no_price exist in supabase/migrations/ but were
+-- never added to this file — they landed in a later commit than the script.
+-- If shop_products has no `kind` column, apply those two first; the app's
+-- showcase/listing split already depends on them. Check with:
+--   SELECT column_name FROM information_schema.columns
+--    WHERE table_name = 'shop_products' AND column_name = 'kind';
+-- ============================================================================
+
+BEGIN;
+
+ALTER TABLE consultant_profiles
+  ADD COLUMN IF NOT EXISTS price_unit TEXT NOT NULL DEFAULT 'per_project';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'consultant_profiles_price_unit_check'
+  ) THEN
+    ALTER TABLE consultant_profiles
+      ADD CONSTRAINT consultant_profiles_price_unit_check
+      CHECK (price_unit IN ('per_project', 'per_day', 'per_hour'));
+  END IF;
+END $$;
+
+COMMENT ON COLUMN consultant_profiles.price_unit IS
+  'What base_price is quoted against. Rendered as the suffix on the profile price row.';
+
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS start_time     TIME,
+  ADD COLUMN IF NOT EXISTS duration_value INTEGER,
+  ADD COLUMN IF NOT EXISTS duration_unit  TEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'projects_duration_unit_check'
+  ) THEN
+    ALTER TABLE projects
+      ADD CONSTRAINT projects_duration_unit_check
+      CHECK (duration_unit IN ('hours', 'days'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'projects_duration_value_check'
+  ) THEN
+    ALTER TABLE projects
+      ADD CONSTRAINT projects_duration_value_check
+      CHECK (duration_value IS NULL OR duration_value > 0);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'projects_duration_pair_check'
+  ) THEN
+    ALTER TABLE projects
+      ADD CONSTRAINT projects_duration_pair_check
+      CHECK ((duration_value IS NULL) = (duration_unit IS NULL));
+  END IF;
+END $$;
+
+COMMENT ON COLUMN projects.start_time IS
+  'Call time on event_date. NULL where the booking flow never asked (bidding path, pre-migration rows).';
+COMMENT ON COLUMN projects.duration_value IS
+  'How long the consultant is held for, in duration_unit. Set together or both NULL.';
+
+INSERT INTO supabase_migrations.schema_migrations (version) VALUES
+  ('20260829120100')
+ON CONFLICT (version) DO NOTHING;
+
+COMMIT;
+
+-- ── Verify the addendum (run AFTER the COMMIT succeeds) ─────────────────────
+-- 1. Expect price_unit = 'per_project' on every existing row:
+--    SELECT price_unit, count(*) FROM consultant_profiles GROUP BY price_unit;
+--
+-- 2. Expect four columns back:
+--    SELECT column_name, data_type, is_nullable
+--      FROM information_schema.columns
+--     WHERE (table_name = 'consultant_profiles' AND column_name = 'price_unit')
+--        OR (table_name = 'projects' AND column_name IN
+--            ('start_time','duration_value','duration_unit'))
+--     ORDER BY table_name, column_name;
+--
+-- 3. Expect four CHECK constraints:
+--    SELECT conname FROM pg_constraint
+--     WHERE conname IN ('consultant_profiles_price_unit_check',
+--                       'projects_duration_unit_check',
+--                       'projects_duration_value_check',
+--                       'projects_duration_pair_check');

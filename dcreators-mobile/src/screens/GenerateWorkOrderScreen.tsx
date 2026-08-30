@@ -19,8 +19,8 @@ import {
   ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle, Info, ArrowLeft } from 'lucide-react-native';
-import TopHeader from '../components/TopHeader';
+import { CheckCircle, Info } from 'lucide-react-native';
+import ScreenHeader from '../components/ScreenHeader';
 import { updateProjectStatus } from '../services/projectService';
 import { sendNotification } from '../lib/notifications';
 import { colors, fonts, fontSizes, spacing, radii, shadows } from '../styles/theme';
@@ -89,20 +89,13 @@ export default function GenerateWorkOrderScreen({ navigation, route }: any) {
   return (
     <View style={styles.bg}>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <TopHeader />
+        <ScreenHeader title="Generate Work Order" />
 
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.titleRow}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-              <ArrowLeft size={20} color={colors.textPrimary} />
-            </TouchableOpacity>
-            <Text style={styles.pageTitle}>Generate Work Order</Text>
-            <View style={{ width: 36 }} />
-          </View>
 
           {/* ── Payment Confirmed header ─────────────────── */}
           <View style={styles.successHeader}>
@@ -189,19 +182,6 @@ const styles = StyleSheet.create({
 
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: 100 },
 
-  titleRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: spacing.lg,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.cardBg, ...shadows.sm,
-  },
-  pageTitle: {
-    fontSize: fontSizes.xl, fontWeight: '800', fontFamily: fonts.heavy,
-    color: colors.textPrimary,
-  },
 
   // ── Success header ──────────────────────────────────────────
   successHeader: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.md },

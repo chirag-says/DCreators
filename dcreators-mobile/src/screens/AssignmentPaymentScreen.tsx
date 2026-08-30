@@ -21,7 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Wallet, CheckCircle2, Clock, MessageCircle, Upload, AlertCircle,
 } from 'lucide-react-native';
-import TopHeader from '../components/TopHeader';
+import ScreenHeader from '../components/ScreenHeader';
 import { fetchProjectPayments, fetchProjectSubmissions } from '../services/projectService';
 import { colors, fonts, fontSizes, spacing, radii } from '../styles/theme';
 import { getAssignmentTitle } from '../lib/assignment';
@@ -131,7 +131,7 @@ export default function AssignmentPaymentScreen({ navigation, route }: any) {
   if (!projectId) {
     return (
       <SafeAreaView style={s.safe} edges={['top']}>
-        <TopHeader />
+        <ScreenHeader title="Assignment Payment" />
         <View style={s.centred}>
           <AlertCircle size={40} color="#D1D5DB" />
           <Text style={s.emptyTitle}>No assignment selected</Text>
@@ -145,7 +145,7 @@ export default function AssignmentPaymentScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <TopHeader />
+      <ScreenHeader title="Assignment Payment" />
 
       <ScrollView
         contentContainerStyle={s.scroll}

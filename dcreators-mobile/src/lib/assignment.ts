@@ -12,8 +12,8 @@
  *
  * CREATIVE_ITEMS_BY_CATEGORY is the single source of truth for what can be
  * commissioned. Before this it existed three times over — ConsultantService
- * PricingScreen's SERVICE_ITEMS, HireConsultantScreen's own role-keyed map,
- * and a flat list here — so a client could ask for something no consultant in
+ * PricingScreen's SERVICE_ITEMS, the since-deleted HireConsultantScreen's own
+ * role-keyed map, and a flat list here — so a client could ask for something no consultant in
  * that category prices. The pricing screen's list wins because it is the one
  * consultants actually set fees against (consultant_service_pricing rows key
  * off these exact strings); changing the wording here orphans those rows.
