@@ -35,6 +35,11 @@ ios/
 # EAS
 .eas/
 
+# Play Console service account key, used by `eas submit`. Anyone holding this
+# can publish to the store listing.
+play-service-account.json
+**/play-service-account.json
+
 # Supabase
 supabase/.temp/
 
