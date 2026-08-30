@@ -40,14 +40,12 @@ export interface ConsultantProfile {
   price_unit: PriceUnit;
   is_approved: boolean;
   is_active: boolean;
-  // KYC / banking — collected on the Create Creator's Account screen
   institution_name: string | null;
-  aadhar_number: string | null;
-  pan_number: string | null;
-  bank_name: string | null;
-  ifsc_code: string | null;
-  bank_account_number: string | null;
   terms_pdf_url: string | null;
+  // Aadhaar, PAN and bank details are NOT here. consultant_profiles is
+  // publicly readable for approved creators, so they live on consultant_kyc
+  // instead, behind an owner-only policy. The app writes them during
+  // onboarding and never reads them back.
   // Category-specific onboarding answers — see src/config/categoryQuestions.ts
   // for the question schema each category's answers are keyed against.
   category_details: Record<string, unknown> | null;

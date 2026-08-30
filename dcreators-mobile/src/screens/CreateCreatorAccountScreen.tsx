@@ -83,11 +83,6 @@ export default function CreateCreatorAccountScreen({ navigation }: any) {
   const [submitting, setSubmitting] = useState(false);
 
   async function pickAvatar() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permission needed', 'Please allow photo library access.');
-      return;
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,

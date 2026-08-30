@@ -21,7 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { uploadToCloudinary } from '../lib/cloudinary';
 import { useAuthStore } from '../store/useAuthStore';
 import { fetchConsultantProducts, updateShopProduct, createShopProduct } from '../services/shopService';
-import { syncConsultantPortfolioImages, approveConsultantProfile } from '../services/consultantService';
+import { syncConsultantPortfolioImages } from '../services/consultantService';
 import { colors, fonts, fontSizes, spacing } from '../styles/theme';
 import ImageCropModal, { CropVariants } from '../components/ImageCropModal';
 
@@ -98,8 +98,6 @@ export default function ConsultantPortfolioUpdateScreen({ navigation, route }: a
   }
 
   async function pickImage(idx: number) {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission required', 'Please allow media library access.'); return; }
     // No allowsEditing/aspect here — the consultant picks their own crop
     // shape and framing in ImageCropModal instead of a forced auto-crop.
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
@@ -188,7 +186,6 @@ export default function ConsultantPortfolioUpdateScreen({ navigation, route }: a
     await syncProfilePortfolioImages();
 
     if (fromOnboarding && consultantProfile?.id) {
-      await approveConsultantProfile(consultantProfile.id);
       await fetchConsultantProfile();
       Alert.alert(
         'Profile Submitted 🎉',

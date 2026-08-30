@@ -36,12 +36,10 @@ export default function AddEditProductScreen({ navigation, route }: any) {
       return;
     }
 
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please grant photo library access to upload images.');
-      return;
-    }
-
+    // No permission request: launchImageLibraryAsync goes through the system
+    // photo picker, which hands back only the images the user selects. Asking
+    // for READ_MEDIA_IMAGES would put the app in Play's broad-photo-access
+    // declaration track for no gain. Same in every other picker call site.
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,

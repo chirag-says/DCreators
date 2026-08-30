@@ -288,6 +288,11 @@ export async function syncConsultantPortfolioImages(consultantId: string, maxSlo
 /**
  * Create or update a consultant profile during onboarding (KYC + banking details).
  * Keyed on user_id; safe to call again if onboarding is retried.
+ *
+ * This writes two tables. The browsable half lives on consultant_profiles,
+ * which carries a public read policy; the Aadhaar, PAN and bank details live
+ * on consultant_kyc, which is readable only by the creator they belong to.
+ * See 20260830120200_move_kyc_out_of_public_table.sql for why they were split.
  */
 export async function upsertConsultantProfile(profile: {
   user_id: string;
@@ -303,21 +308,39 @@ export async function upsertConsultantProfile(profile: {
   bank_account_number: string;
   terms_pdf_url: string | null;
 }): Promise<void> {
-  const { error } = await supabase.from('consultant_profiles').upsert({
-    ...profile,
-    is_approved: false,
-    is_active: true,
-  }, { onConflict: 'user_id', ignoreDuplicates: false });
+  const {
+    aadhar_number, pan_number, bank_name, ifsc_code, bank_account_number,
+    ...publicProfile
+  } = profile;
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  // `is_approved` is deliberately absent. On insert the column default (false)
+  // applies; on a retry or a later edit the existing value is left alone, so
+  // an approved creator does not silently lose their approval by saving their
+  // own profile. It is not a field the app may write at all — see
+  // 20260830120100_lock_consultant_approval.sql.
+  const { data: saved, error } = await supabase
+    .from('consultant_profiles')
+    .upsert({ ...publicProfile, is_active: true }, { onConflict: 'user_id', ignoreDuplicates: false })
+    .select('id')
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  const { error: kycError } = await supabase.from('consultant_kyc').upsert({
+    consultant_id: saved.id,
+    aadhar_number,
+    pan_number,
+    bank_name,
+    ifsc_code,
+    bank_account_number,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'consultant_id', ignoreDuplicates: false });
+
+  if (kycError) throw new Error(kycError.message);
 }
 
-/** Mark a consultant profile as approved (e.g. after completing onboarding). */
-export async function approveConsultantProfile(consultantId: string): Promise<void> {
-  const { error } = await supabase.from('consultant_profiles').update({ is_approved: true }).eq('id', consultantId);
-  if (error) {
-    throw new Error(error.message);
-  }
-}
+// approveConsultantProfile lived here and set is_approved = true from the app.
+// Finishing your own portfolio upload is not vetting, so the only caller
+// (ConsultantPortfolioUpdateScreen, at the end of onboarding) was approving
+// every creator the moment they signed up, while the success alert told them
+// they were "pending admin approval". Approval is now a service-role action.

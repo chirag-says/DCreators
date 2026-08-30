@@ -156,8 +156,6 @@ export default function CreatorWorkorderScreen({ navigation, route }: any) {
   // ── Upload logic ──────────────────────────────────────────
   async function pickImage() {
     if (uploadFiles.length >= 3) { Alert.alert('Limit', 'Max 3 files per round.'); return; }
-    const { status: perm } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (perm !== 'granted') { Alert.alert('Permission needed'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
     if (!result.canceled && result.assets[0]) {
       setUploadFiles(prev => [...prev, result.assets[0].uri]);

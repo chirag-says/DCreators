@@ -62,9 +62,13 @@ export default function PaymentScreen({ navigation, route }: any) {
       Alert.alert('Error', 'User profile not found. Please log in again.');
       return;
     }
+    if (!project?.id) {
+      Alert.alert('Error', 'This payment is not attached to a project.');
+      return;
+    }
 
     // For balance payment: transition final_approved → balance_pending before opening gateway
-    if (paymentType === 'balance' && project?.id) {
+    if (paymentType === 'balance') {
       try { await updateProjectStatus(project.id, 'balance_pending'); }
       catch (err: any) { Alert.alert('Error', err.message); return; }
     }
@@ -72,14 +76,20 @@ export default function PaymentScreen({ navigation, route }: any) {
     completionHandledRef.current = false;
     setIsPaying(true);
     try {
+      // The amount is the server's to decide. `payAmount` below is only what
+      // this screen displays; if the two ever disagree the server wins, and
+      // the user should be told before they are sent to the gateway.
       const order = await createCashfreeOrder({
-        projectId: project?.id,
-        amount: payAmount,
+        projectId: project.id,
         paymentType,
-        customerName: profile.name || 'User',
-        customerEmail: profile.email,
-        customerPhone: profile.phone || undefined,
       });
+
+      if (order.amount !== payAmount) {
+        Alert.alert(
+          'Amount updated',
+          `The agreed price changed. You are being charged ₹${order.amount.toLocaleString('en-IN')}.`,
+        );
+      }
 
       setCurrentOrderId(order.order_id);
       const env = order.environment === 'PROD' ? 'production' : 'sandbox';
